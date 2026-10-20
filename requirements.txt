@@ -1,0 +1,10 @@
+aiogram==3.31.0
+aiosqlite==0.22.1
+APScheduler==3.11.3
+pydantic==2.13.5
+pydantic-settings==2.16.1
+curl_cffi==0.16.3
+Kurigram==2.2.6
+aportalsmp==1.3
+tonnelmp==1.2
+amrkt==1.6.0
