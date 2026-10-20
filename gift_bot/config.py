@@ -79,6 +79,13 @@ class Settings(BaseSettings):
     max_daily_loss_ton: float = Field(30.0, alias="MAX_DAILY_LOSS_TON")
     max_open_positions: int = Field(5, alias="MAX_OPEN_POSITIONS")
 
+    # --- Админ-панель ---
+    panel_enabled: bool = Field(True, alias="PANEL_ENABLED")
+    # 127.0.0.1 — панель видна только на этом компьютере; на сервере 0.0.0.0 + пароль
+    panel_host: str = Field("127.0.0.1", alias="PANEL_HOST")
+    panel_port: int = Field(8080, alias="PANEL_PORT")
+    panel_password: SecretStr | None = Field(None, alias="PANEL_PASSWORD")
+
     # --- Еженедельный отчёт ---
     report_weekday: str = Field("mon", alias="REPORT_WEEKDAY")
     report_hour: int = Field(9, alias="REPORT_HOUR")
@@ -90,7 +97,7 @@ class Settings(BaseSettings):
         """Все секреты — чтобы вырезать их из логов."""
         out = []
         for v in (self.bot_token, self.tg_api_hash, self.tg_session_string,
-                  self.tonnel_auth_data, self.http_proxy):
+                  self.tonnel_auth_data, self.http_proxy, self.panel_password):
             if v is not None and v.get_secret_value():
                 out.append(v.get_secret_value())
         return out

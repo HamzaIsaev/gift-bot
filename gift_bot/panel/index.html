@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gift Bot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#07090f; --card:#0f1420; --card2:#141b2b; --line:#1e2738; --text:#eef2f8; --muted:#8a94a6;
+  --ton:#0098ea; --ton2:#00c2ff; --ton3:#2d6bff; --gold:#ffd43b; --green:#3ee08f; --red:#ff5a5f;
+}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);
+  font:14px/1.45 Inter,-apple-system,"Segoe UI",Roboto,sans-serif;
+  background-image:radial-gradient(900px 500px at 85% -10%,rgba(0,152,234,.18),transparent 60%),
+                   radial-gradient(700px 400px at -10% 110%,rgba(255,212,59,.07),transparent 60%)}
+.wrap{max-width:1240px;margin:0 auto;padding:22px 16px 60px}
+header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px;margin-bottom:22px}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;
+  background:linear-gradient(145deg,var(--ton2),var(--ton3));box-shadow:0 8px 28px rgba(0,152,234,.45)}
+.brand h1{margin:0;font-size:22px;font-weight:800;letter-spacing:-.02em}
+.status{display:inline-flex;align-items:center;gap:8px;margin-top:3px;font-size:13px;color:var(--muted)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green)}
+.dot.stop{background:var(--red);box-shadow:0 0 10px var(--red)}.dot.pause{background:var(--gold);box-shadow:0 0 10px var(--gold)}
+.actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+
+/* ---- кнопки в стиле TON / Notcoin ---- */
+.btn{appearance:none;border:0;cursor:pointer;font:inherit;font-weight:700;font-size:15px;color:#fff;
+  padding:12px 22px;border-radius:999px;display:inline-flex;align-items:center;gap:8px;
+  background:linear-gradient(135deg,var(--ton2) 0%,var(--ton) 45%,var(--ton3) 100%);
+  box-shadow:0 6px 22px rgba(0,152,234,.45),inset 0 1px 0 rgba(255,255,255,.35);
+  transition:transform .12s ease,box-shadow .2s ease,filter .2s}
+.btn:hover{transform:translateY(-2px);box-shadow:0 10px 30px rgba(0,152,234,.6),inset 0 1px 0 rgba(255,255,255,.35);filter:brightness(1.07)}
+.btn:active{transform:scale(.96)}
+.btn.gold{color:#111;background:linear-gradient(135deg,#fff3a6,var(--gold) 50%,#f5a623);
+  box-shadow:0 6px 22px rgba(255,212,59,.35),inset 0 1px 0 rgba(255,255,255,.6)}
+.btn.danger{background:linear-gradient(135deg,#ff8a5c,var(--red) 55%,#d81b4a);box-shadow:0 6px 22px rgba(255,90,95,.45),inset 0 1px 0 rgba(255,255,255,.3)}
+.btn.ghost{background:var(--card2);box-shadow:inset 0 0 0 1px var(--line);color:var(--text)}
+.btn.ghost:hover{box-shadow:inset 0 0 0 1px var(--ton),0 6px 20px rgba(0,152,234,.25)}
+.btn.sm{padding:8px 16px;font-size:13px}
+.seg{display:inline-flex;padding:4px;border-radius:999px;background:var(--card2);box-shadow:inset 0 0 0 1px var(--line)}
+.seg button{appearance:none;border:0;background:none;color:var(--muted);font:inherit;font-weight:700;
+  padding:9px 18px;border-radius:999px;cursor:pointer;transition:all .2s}
+.seg button.on{color:#fff;background:linear-gradient(135deg,var(--ton2),var(--ton3));box-shadow:0 4px 16px rgba(0,152,234,.45)}
+
+.tabs{margin-bottom:18px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:14px}
+.grid2{display:grid;grid-template-columns:1.6fr 1fr;gap:14px;margin-bottom:14px}
+.grid2e{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.card{background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:20px;padding:18px}
+.lbl{color:var(--muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+.val{font-size:28px;font-weight:800;margin-top:6px;letter-spacing:-.02em}
+.sub{color:var(--muted);font-size:12px;margin-top:2px}
+.g{color:var(--green)}.r{color:var(--red)}.gold-t{color:var(--gold)}
+.ton-ico{display:inline-block;width:18px;height:18px;vertical-align:-3px;margin-left:4px}
+h3{margin:0 0 12px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{color:var(--muted);font-weight:600;text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:10px 6px;border-bottom:1px solid #151c29}
+.tag{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;background:#1a2333;color:#9fb0c8;white-space:nowrap}
+.tag.buy{background:rgba(0,152,234,.15);color:#5cc8ff}.tag.arb{background:rgba(255,212,59,.13);color:var(--gold)}
+.tag.v{background:rgba(160,120,255,.15);color:#c3a8ff}
+.lim-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid #151c29}
+.lim-row input{width:90px;background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:999px;padding:8px 12px;font:inherit;text-align:right}
+.lim-row input:focus{outline:none;border-color:var(--ton);box-shadow:0 0 0 3px rgba(0,152,234,.25)}
+.bar{height:6px;background:#1a2333;border-radius:3px;margin-top:6px;overflow:hidden}.bar i{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,var(--ton2),var(--ton3))}
+.empty{color:var(--muted);text-align:center;padding:22px}
+.scroll{overflow-x:auto}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(120px);background:var(--card2);border:1px solid var(--line);
+  padding:12px 20px;border-radius:999px;font-weight:600;transition:transform .3s;box-shadow:0 10px 30px rgba(0,0,0,.5);z-index:9}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.hidden{display:none}
+@media (max-width:900px){.grid4{grid-template-columns:1fr 1fr}.grid2,.grid2e{grid-template-columns:1fr}}
+@media (max-width:480px){.grid4{grid-template-columns:1fr}.val{font-size:24px}.btn{padding:11px 18px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="logo"><svg width="24" height="24" viewBox="0 0 56 56" fill="none"><path d="M37.6 15.6H18.4c-3.5 0-5.8 3.8-4 6.9l11.8 20.5c.8 1.4 2.8 1.4 3.6 0l11.8-20.5c1.8-3.1-.5-6.9-4-6.9Zm-11.3 21.2-2.6-5-6.2-11.1c-.4-.7.1-1.6 1-1.6h7.8v17.7Zm12.2-16.1-6.2 11.1-2.6 5V19.1h7.8c.9 0 1.4.9 1 1.6Z" fill="#fff"/></svg></div>
+      <div><h1>Gift Bot</h1><div class="status"><span id="dot" class="dot"></span><span id="stateText">загрузка…</span></div></div>
+    </div>
+    <div class="actions">
+      <div class="seg" id="modeSeg"><button data-mode="observe" class="on">🧪 Наблюдение</button><button data-mode="live">💎 Боевой</button></div>
+      <button class="btn gold hidden" id="resumeBtn">▶ Продолжить</button>
+      <button class="btn danger" id="stopBtn">■ Стоп</button>
+    </div>
+  </header>
+
+  <div class="seg tabs" id="tabs"><button data-tab="overview" class="on">Обзор</button><button data-tab="trades">Сделки</button><button data-tab="signals">Сигналы</button></div>
+
+  <section id="tab-overview">
+    <div class="grid4">
+      <div class="card"><div class="lbl" id="balLbl">Баланс</div><div class="val" id="balance">—</div><div class="sub" id="free"></div></div>
+      <div class="card"><div class="lbl">Прибыль сегодня</div><div class="val" id="today">—</div><div class="sub" id="todaySub"></div></div>
+      <div class="card"><div class="lbl">Прибыль за неделю</div><div class="val" id="week">—</div><div class="sub" id="weekSub"></div></div>
+      <div class="card"><div class="lbl">Сделок за неделю</div><div class="val" id="trades">—</div><div class="sub" id="tradesSub"></div></div>
+    </div>
+    <div class="grid2">
+      <div class="card"><h3>Прибыль по дням, TON</h3><svg id="chart" viewBox="0 0 640 220" width="100%" height="220"></svg></div>
+      <div class="card">
+        <h3>Лимиты</h3>
+        <div class="lim-row"><span>Макс. сумма сделки, TON</span><span><input id="lim-max_trade" inputmode="decimal"> <button class="btn sm" data-lim="max_trade">OK</button></span></div>
+        <div class="lim-row" style="display:block"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><span>Дневной убыток, TON</span><span><input id="lim-max_daily_loss" inputmode="decimal"> <button class="btn sm" data-lim="max_daily_loss">OK</button></span></div><div class="bar"><i id="lossBar" style="width:0"></i></div></div>
+        <div class="lim-row" style="display:block"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><span>Подарков одновременно</span><span><input id="lim-max_positions" inputmode="numeric"> <button class="btn sm" data-lim="max_positions">OK</button></span></div><div class="bar"><i id="posBar" style="width:0"></i></div></div>
+        <div class="lim-row" style="border:0"><span>Мин. прибыль</span><b id="minProfit">—</b></div>
+      </div>
+    </div>
+    <div class="grid2e">
+      <div class="card"><h3>Открытые позиции</h3><div class="scroll"><table><thead><tr><th>Подарок</th><th>Площадка</th><th>Куплено</th><th>Выставлено</th><th>Мин.</th></tr></thead><tbody id="positions"></tbody></table></div></div>
+      <div class="card"><h3>Лучшие модели недели</h3><div class="scroll"><table><thead><tr><th>Модель</th><th style="text-align:right">Прибыль, TON</th></tr></thead><tbody id="models"></tbody></table></div></div>
+    </div>
+  </section>
+
+  <section id="tab-trades" class="hidden">
+    <div class="card"><h3>Закрытые сделки</h3><div class="scroll"><table><thead><tr><th>Закрыта</th><th>Подарок</th><th>Площадка</th><th>Затраты</th><th>Продано</th><th>На руки</th><th>Прибыль</th><th>Время</th></tr></thead><tbody id="tradesTable"></tbody></table></div></div>
+  </section>
+
+  <section id="tab-signals" class="hidden">
+    <div class="card"><h3>Сигналы</h3><div class="scroll"><table><thead><tr><th>Время</th><th>Подарок</th><th>Площадка</th><th>Цена</th><th>Рынок</th><th>Прибыль</th><th>Порог</th><th>Решение</th></tr></thead><tbody id="signalsTable"></tbody></table></div></div>
+  </section>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const MK={portals:"Portals",tonnel:"Tonnel",mrkt:"MRKT"};
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const n2=x=>x==null?"—":Number(x).toFixed(2);
+const sign=x=>x==null?"—":(x>=0?"+":"")+Number(x).toFixed(2);
+const cls=x=>x>0?"g":x<0?"r":"";
+const time=s=>{if(!s)return"—";const d=new Date(s);return d.toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})};
+const hours=(a,b)=>((new Date(b)-new Date(a))/36e5).toFixed(1)+" ч";
+let tab="overview", state=null;
+
+function toast(t){const el=$("toast");el.textContent=t;el.classList.add("show");clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove("show"),2600)}
+async function api(path,body){
+  const r=await fetch(path,body===undefined?{}:{method:"POST",headers:{"Content-Type":"application/json","X-Panel":"1"},body:JSON.stringify(body)});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(j.error||("Ошибка "+r.status));
+  return j;
+}
+
+function chart(days){
+  const W=640,H=220,top=16,base=180,left=34,step=(W-left)/days.length,bw=Math.min(54,step*.62);
+  const max=Math.max(1,...days.map(d=>Math.abs(d.pnl)));
+  const neg=days.some(d=>d.pnl<0), zero=neg?top+(base-top)*.62:base, scale=(zero-top)/max;
+  let s=`<g stroke="#1e2738">`+[top,zero].map(y=>`<line x1="${left}" x2="${W}" y1="${y}" y2="${y}"/>`).join("")+`</g>`;
+  s+=`<g font-size="11" fill="#8a94a6"><text x="0" y="${top+4}">${max.toFixed(1)}</text><text x="0" y="${zero+4}">0</text></g>`;
+  s+=`<defs><linearGradient id="gp" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#00c2ff"/><stop offset="1" stop-color="#2d6bff"/></linearGradient></defs>`;
+  days.forEach((d,i)=>{
+    const x=left+i*step+(step-bw)/2, h=Math.max(2,Math.abs(d.pnl)*scale);
+    const y=d.pnl>=0?zero-h:zero, fill=d.pnl>=0?"url(#gp)":"#ff5a5f";
+    const wd=new Date(d.day+"T12:00").toLocaleDateString("ru-RU",{weekday:"short"});
+    s+=`<rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="8" fill="${fill}"><title>${d.day}: ${sign(d.pnl)} TON</title></rect>`;
+    s+=`<text x="${x+bw/2}" y="${H-12}" text-anchor="middle" font-size="12" fill="#8a94a6">${wd}</text>`;
+  });
+  $("chart").innerHTML=s;
+}
+
+function render(o){
+  state=o;
+  const st=o.stopped?["stop","Остановлен (/stop)"]:o.halted?["pause","Пауза до завтра — дневной лимит убытка"]:["","Работает · "+(o.mode==="live"?"боевой режим":"наблюдение")];
+  $("dot").className="dot "+st[0]; $("stateText").textContent=st[1];
+  $("resumeBtn").classList.toggle("hidden",!o.stopped); $("stopBtn").classList.toggle("hidden",o.stopped);
+  document.querySelectorAll("#modeSeg button").forEach(b=>b.classList.toggle("on",b.dataset.mode===o.mode));
+
+  $("balLbl").textContent=o.balance!=null?"Баланс (виртуальный)":"Баланс";
+  $("balance").innerHTML=o.balance!=null?n2(o.balance)+' <span class="sub">TON</span>':"—";
+  $("free").textContent=o.free!=null?"свободно "+n2(o.free)+" TON":"";
+  $("today").textContent=sign(o.pnl_today); $("today").className="val "+cls(o.pnl_today);
+  $("todaySub").textContent="за всё время "+sign(o.pnl_total)+" TON";
+  $("week").textContent=sign(o.week.pnl); $("week").className="val "+cls(o.week.pnl);
+  const d=o.week.pnl-o.prev_week_pnl; $("weekSub").textContent=(d>=0?"▲ ":"▼ ")+sign(d)+" к прошлой неделе";
+  $("trades").textContent=o.week.trades;
+  $("tradesSub").textContent=`${o.week.wins} в плюс · ${o.week.losses} в минус`+(o.week.avg_hold_h!=null?` · ${o.week.avg_hold_h.toFixed(1)} ч в среднем`:"");
+  chart(o.daily);
+
+  for(const k of ["max_trade","max_daily_loss","max_positions"]){const el=$("lim-"+k);if(document.activeElement!==el)el.value=o.limits[k]}
+  const loss=Math.max(0,-o.pnl_today); $("lossBar").style.width=Math.min(100,loss/o.limits.max_daily_loss*100)+"%";
+  $("posBar").style.width=Math.min(100,o.positions.length/o.limits.max_positions*100)+"%";
+  $("minProfit").textContent=o.min_profit_pct+"%"+(o.adaptive?" · адаптивно":"");
+
+  $("positions").innerHTML=o.positions.length?o.positions.map(p=>`<tr><td>${esc(p.title)} ${p.mode==="virtual"?'<span class="tag v">вирт</span>':""}</td><td>${MK[p.market]||esc(p.market)}</td><td>${n2(p.buy_cost)}</td><td><b>${n2(p.ask_price)}</b></td><td>${n2(p.min_price)}</td></tr>`).join(""):`<tr><td colspan="5" class="empty">Позиций нет</td></tr>`;
+  $("models").innerHTML=o.top_models.length?o.top_models.map(([m,p])=>`<tr><td>${esc(m)}</td><td style="text-align:right" class="${cls(p)}"><b>${sign(p)}</b></td></tr>`).join(""):`<tr><td colspan="2" class="empty">Пока нет сделок</td></tr>`;
+}
+
+async function loadTab(){
+  if(tab==="trades"){
+    const rows=await api("/api/trades");
+    $("tradesTable").innerHTML=rows.length?rows.map(r=>`<tr><td>${time(r.closed_at)}</td><td>${esc(r.title)}</td><td>${MK[r.market]||esc(r.market)}</td><td>${n2(r.buy_cost)}</td><td>${n2(r.sold_price)}</td><td>${n2(r.net_proceeds)}</td><td class="${cls(r.pnl)}"><b>${sign(r.pnl)}</b></td><td>${hours(r.opened_at,r.closed_at)}</td></tr>`).join(""):`<tr><td colspan="8" class="empty">Сделок пока нет</td></tr>`;
+  }else if(tab==="signals"){
+    const rows=await api("/api/signals");
+    const dec=r=>r.decision==="buy"?'<span class="tag buy">покупка</span>':r.decision==="signal"?'<span class="tag arb">арбитраж → '+(MK[r.target_market]||"")+'</span>':`<span class="tag" title="${esc(r.reason)}">пропуск: ${esc((r.reason||"").replace(/^limit:/,"лимит ").split(" — ")[0].slice(0,28))}</span>`;
+    $("signalsTable").innerHTML=rows.length?rows.map(r=>`<tr><td>${time(r.ts)}</td><td>${esc(r.title)}</td><td>${MK[r.market]||esc(r.market)}</td><td>${n2(r.price)}</td><td>${n2(r.market_price)}</td><td class="${cls(r.profit_pct)}">${sign(r.profit_pct)}%</td><td>${n2(r.required_pct)}%</td><td>${dec(r)}</td></tr>`).join(""):`<tr><td colspan="8" class="empty">Сигналов пока нет</td></tr>`;
+  }
+}
+
+async function refresh(){try{render(await api("/api/overview"));await loadTab()}catch(e){$("stateText").textContent="нет связи с ботом";$("dot").className="dot stop"}}
+
+$("tabs").onclick=e=>{const b=e.target.closest("button");if(!b)return;tab=b.dataset.tab;
+  document.querySelectorAll("#tabs button").forEach(x=>x.classList.toggle("on",x===b));
+  for(const t of ["overview","trades","signals"])$("tab-"+t).classList.toggle("hidden",t!==tab);loadTab()};
+$("stopBtn").onclick=async()=>{if(!confirm("Остановить все сделки?"))return;await api("/api/stop",{});toast("🛑 Остановлено");refresh()};
+$("resumeBtn").onclick=async()=>{await api("/api/resume",{});toast("▶ Работа возобновлена");refresh()};
+$("modeSeg").onclick=async e=>{const b=e.target.closest("button");if(!b)return;
+  try{await api("/api/mode",{mode:b.dataset.mode});toast("Режим: наблюдение");refresh()}catch(err){toast(err.message)}};
+document.querySelectorAll("[data-lim]").forEach(b=>b.onclick=async()=>{const k=b.dataset.lim;
+  try{const r=await api("/api/limits",{name:k,value:$("lim-"+k).value});toast("✅ "+r.message);refresh()}catch(err){toast(err.message)}});
+
+refresh(); setInterval(refresh,10000);
+</script>
+</body>
+</html>

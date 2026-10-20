@@ -246,6 +246,17 @@ class Database:
         )
         return (await cur.fetchone())["n"]
 
+    async def recent_closed(self, mode: str, limit: int = 50) -> list[sqlite_row]:
+        cur = await self.conn.execute(
+            "SELECT * FROM positions WHERE status='sold' AND mode=? ORDER BY closed_at DESC LIMIT ?",
+            (mode, limit),
+        )
+        return await cur.fetchall()
+
+    async def recent_signals(self, limit: int = 50) -> list[sqlite_row]:
+        cur = await self.conn.execute("SELECT * FROM signals ORDER BY id DESC LIMIT ?", (limit,))
+        return await cur.fetchall()
+
     # --- events ---
     async def log_event(self, level: str, text: str) -> None:
         await self.conn.execute(

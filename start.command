@@ -66,4 +66,6 @@ fi
 
 # --- Запуск ---
 say "Бот запускается. Не закрывайте это окно (остановить — Ctrl+C). Mac не уснёт, пока бот работает."
+echo "Админ-панель: http://localhost:8080 (откроется в браузере через несколько секунд)"
+(sleep 6 && open "http://localhost:8080") &
 caffeinate -i .venv/bin/python -m gift_bot

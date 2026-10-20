@@ -18,6 +18,7 @@ from gift_bot.markets.mrkt import MrktMarket
 from gift_bot.markets.portals import PortalsMarket
 from gift_bot.markets.telegram_auth import TelegramAuth
 from gift_bot.markets.tonnel import TonnelMarket
+from gift_bot.panel.server import Panel
 from gift_bot.pricing.valuation import Pricer
 from gift_bot.reports.weekly import build_report
 from gift_bot.risk.limits import LIVE, OBSERVE, RiskManager
@@ -76,6 +77,10 @@ async def main() -> None:
     scheduler.add_job(weekly, "cron", day_of_week=s.report_weekday, hour=s.report_hour, minute=0)
     scheduler.start()
 
+    panel = Panel(s, db, risk, bot.notify) if s.panel_enabled else None
+    if panel:
+        await panel.start()
+
     log.info("Старт. Площадки: %s, режим: %s", ", ".join(markets), risk.mode)
     await bot.notify(f"🚀 Бот запущен. Режим: наблюдение. Площадки: {', '.join(markets)}"
                      + ("\n🛑 Действует /stop — сделки не совершаются." if risk.stopped else ""))
@@ -83,6 +88,8 @@ async def main() -> None:
         await asyncio.gather(bot.run(), trader.run())
     finally:
         scheduler.shutdown(wait=False)
+        if panel:
+            await panel.stop_server()
         await tg.stop()
         await db.close()
 
