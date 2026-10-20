@@ -57,7 +57,12 @@
   - получите `api_id` и `api_hash` на [my.telegram.org](https://my.telegram.org) в разделе API development tools;
   - откройте с этого аккаунта Portals, Tonnel и MRKT хотя бы один раз (чтобы принять условия).
 
-### Шаги
+### Быстрый старт на Mac
+1. Скачайте код (Code → Download ZIP) и распакуйте.
+2. Откройте файл `Запустить.command`. Если macOS не даёт его открыть, нажмите правой кнопкой → «Открыть».
+3. Ответьте на вопросы. При первом запуске скрипт сам установит зависимости, создаст `.env` и выполнит вход в Telegram, а затем запустит бота.
+
+### Шаги (сервер)
 ```bash
 git clone https://github.com/HamzaIsaev/gift-bot.git && cd gift-bot
 cp .env.example .env            # заполнить BOT_TOKEN, ADMIN_IDS, TG_API_ID, TG_API_HASH
