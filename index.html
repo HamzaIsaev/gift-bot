@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gift Bot — обмен Telegram-подарками</title>
+  <meta name="description" content="Telegram-бот для безопасного обмена подарками: гарант сделки, оценка стоимости и маркет предложений.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎁</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="glow glow-a"></div>
+  <div class="glow glow-b"></div>
+
+  <header class="nav">
+    <a class="logo" href="#top"><span class="logo-icon">🎁</span>Gift&nbsp;Bot</a>
+    <nav class="nav-links">
+      <a href="#how">Как это работает</a>
+      <a href="#market">Маркет</a>
+      <a href="#trade">Обмен</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <a class="btn btn-small bot-link" href="#">Открыть бота</a>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="hero-text">
+        <span class="pill">Telegram Gifts · P2P обмен</span>
+        <h1>Меняй подарки<br><span class="grad">без риска</span></h1>
+        <p class="lead">Бот выступает гарантом: подарки обеих сторон замораживаются и передаются только когда оба участника подтвердили сделку. Никаких «скинь первым».</p>
+        <div class="hero-cta">
+          <a class="btn bot-link" href="#">Начать обмен в Telegram</a>
+          <a class="btn btn-ghost" href="#how">Как это устроено</a>
+        </div>
+        <ul class="hero-points">
+          <li>Гарант-сделка</li>
+          <li>Оценка по рынку</li>
+          <li>Прямо в Telegram</li>
+        </ul>
+      </div>
+
+      <div class="hero-visual" aria-hidden="true">
+        <div class="trade-card">
+          <div class="tc-side">
+            <div class="gift-tile" style="--c1:#ff8a5b;--c2:#ff3d77">🧸</div>
+            <span class="tc-name">Plush Bear</span>
+            <span class="tc-num">#14 203</span>
+          </div>
+          <div class="tc-swap">⇄</div>
+          <div class="tc-side">
+            <div class="gift-tile" style="--c1:#5bd1ff;--c2:#6c5bff">💎</div>
+            <span class="tc-name">Diamond Ring</span>
+            <span class="tc-num">#3 871</span>
+          </div>
+          <div class="tc-status"><span class="dot"></span>Подарки заморожены гарантом</div>
+        </div>
+        <div class="float float-1" style="--c1:#ffd25b;--c2:#ff8a00">⭐</div>
+        <div class="float float-2" style="--c1:#7dff9b;--c2:#00b37e">🍀</div>
+        <div class="float float-3" style="--c1:#ff7ad9;--c2:#a45bff">🎩</div>
+      </div>
+    </section>
+
+    <section id="how" class="section">
+      <h2>Как проходит обмен</h2>
+      <p class="section-sub">Четыре шага — и подарок у тебя. Бот следит, чтобы никто не ушёл с чужим.</p>
+      <ol class="steps">
+        <li>
+          <span class="step-num">1</span>
+          <h3>Выставь подарок</h3>
+          <p>Выбери подарок из профиля и укажи, что хочешь получить взамен.</p>
+        </li>
+        <li>
+          <span class="step-num">2</span>
+          <h3>Найди пару</h3>
+          <p>Смотри предложения на маркете или отправь ссылку на сделку знакомому.</p>
+        </li>
+        <li>
+          <span class="step-num">3</span>
+          <h3>Передай гаранту</h3>
+          <p>Оба участника передают подарки боту. Пока сделка не завершена — их никто не трогает.</p>
+        </li>
+        <li>
+          <span class="step-num">4</span>
+          <h3>Получи свой</h3>
+          <p>Когда обе стороны на месте, бот отправляет подарки новым владельцам. Если сделка сорвалась — всё возвращается.</p>
+        </li>
+      </ol>
+    </section>
+
+    <section class="section features">
+      <div class="feature">
+        <div class="f-icon">🛡️</div>
+        <h3>Гарант сделки</h3>
+        <p>Бот держит подарки обеих сторон до подтверждения. Обмануть «первым отправлением» невозможно.</p>
+      </div>
+      <div class="feature">
+        <div class="f-icon">📊</div>
+        <h3>Оценка стоимости</h3>
+        <p>Показываем ориентир по рынку для каждого подарка, чтобы обмен был честным для обоих.</p>
+      </div>
+      <div class="feature">
+        <div class="f-icon">⚡</div>
+        <h3>Быстро</h3>
+        <p>Вся сделка — несколько нажатий в чате. Без сторонних сайтов и переписки с посредниками.</p>
+      </div>
+      <div class="feature">
+        <div class="f-icon">🔔</div>
+        <h3>Уведомления</h3>
+        <p>Бот напишет, когда на твой подарок пришло предложение или кто-то выставил то, что ты ищешь.</p>
+      </div>
+    </section>
+
+    <section id="market" class="section">
+      <div class="section-head">
+        <div>
+          <h2>Маркет предложений</h2>
+          <p class="section-sub">Пример того, как выглядят лоты в боте.</p>
+        </div>
+        <div class="filters" role="tablist">
+          <button class="chip active" data-filter="all">Все</button>
+          <button class="chip" data-filter="common">Обычные</button>
+          <button class="chip" data-filter="rare">Редкие</button>
+          <button class="chip" data-filter="legendary">Легендарные</button>
+        </div>
+      </div>
+      <div class="market-grid" id="marketGrid"></div>
+    </section>
+
+    <section id="trade" class="section">
+      <h2>Проверь обмен</h2>
+      <p class="section-sub">Выбери, что отдаёшь и что хочешь получить, — бот подскажет, насколько честна сделка.</p>
+      <div class="simulator">
+        <div class="sim-side">
+          <label for="giveSel">Отдаю</label>
+          <div class="sim-gift" id="givePreview"></div>
+          <select id="giveSel"></select>
+        </div>
+        <div class="sim-mid">
+          <div class="sim-swap">⇄</div>
+        </div>
+        <div class="sim-side">
+          <label for="getSel">Получаю</label>
+          <div class="sim-gift" id="getPreview"></div>
+          <select id="getSel"></select>
+        </div>
+        <div class="sim-result">
+          <div class="meter"><div class="meter-fill" id="meterFill"></div><div class="meter-mid"></div></div>
+          <p id="verdict" class="verdict"></p>
+        </div>
+      </div>
+    </section>
+
+    <section id="faq" class="section">
+      <h2>Вопросы</h2>
+      <div class="faq">
+        <details>
+          <summary>Почему нужен гарант?</summary>
+          <p>При прямом обмене кто-то должен отправить подарок первым — и рискует его потерять. Гарант забирает подарки у обеих сторон и отдаёт их только вместе.</p>
+        </details>
+        <details>
+          <summary>Что будет, если второй участник передумает?</summary>
+          <p>Сделка отменяется, и бот возвращает подарок тому, кто его передал.</p>
+        </details>
+        <details>
+          <summary>Откуда берётся оценка стоимости?</summary>
+          <p>Это ориентир по недавним сделкам и предложениям на рынке. Окончательное решение о цене всегда за участниками.</p>
+        </details>
+        <details>
+          <summary>Нужно ли что-то устанавливать?</summary>
+          <p>Нет. Всё работает внутри Telegram — достаточно открыть бота и нажать «Старт».</p>
+        </details>
+      </div>
+    </section>
+
+    <section class="section cta-final">
+      <h2>Готов к первому обмену?</h2>
+      <p class="section-sub">Открой бота в Telegram и выставь свой подарок за минуту.</p>
+      <a class="btn bot-link" href="#">Открыть Gift Bot</a>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>© <span id="year"></span> Gift Bot</span>
+    <span class="muted">Сервис не связан с Telegram FZ-LLC.</span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
