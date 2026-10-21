@@ -67,7 +67,20 @@ if [ -n "$(get_env TG_API_ID)" ] && [ -z "$(get_env TG_SESSION_STRING)" ]; then
     .venv/bin/python scripts/login.py --write-env
 fi
 if [ -z "$(get_env TG_API_ID)" ]; then
-  say "Вход на площадки — ручной: после запуска напишите боту /auth и следуйте инструкции."
+  # План Б: вход по QR-коду через Telegram Web
+  if [ ! -f .venv/.pw_ready ]; then
+    say "Скачиваю браузер для входа через Telegram Web (один раз, ~150 МБ)..."
+    .venv/bin/python -m pip install -q "playwright==1.64.0"
+    .venv/bin/python -m playwright install chromium && touch .venv/.pw_ready
+  fi
+  if [ ! -d data/tg_web_profile ] || [ "$1" = "--relogin" ]; then
+    say "Вход на площадки: сейчас откроется окно браузера с QR-кодом."
+    echo "На телефоне во ВТОРОМ аккаунте: Telegram → Настройки → Устройства → Подключить устройство → наведите камеру на QR."
+    echo "Дальше ничего не нажимайте — программа сама зайдёт в Portals, Tonnel и MRKT."
+    if ! .venv/bin/python scripts/web_login.py; then
+      echo "Не получилось. Можно повторить: bash start.command --relogin   (или войти вручную: /auth в боте)"
+    fi
+  fi
 fi
 
 # --- Запуск ---

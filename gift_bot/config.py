@@ -93,6 +93,18 @@ class Settings(BaseSettings):
     report_weekday: str = Field("mon", alias="REPORT_WEEKDAY")
     report_hour: int = Field(9, alias="REPORT_HOUR")
 
+    # Сессия Telegram Web для входа по QR (план Б)
+    web_profile_dir: str = Field("data/tg_web_profile", alias="WEB_PROFILE_DIR")
+    web_refresh_hours: float = Field(6.0, alias="WEB_REFRESH_HOURS")
+
+    def web_login_targets(self) -> dict[str, tuple[str, str]]:
+        all_targets = {
+            "portals": (self.portals_bot, self.portals_app),
+            "tonnel": (self.tonnel_bot, self.tonnel_app),
+            "mrkt": (self.mrkt_bot, self.mrkt_app),
+        }
+        return {m: t for m, t in all_targets.items() if m in self.enabled_markets}
+
     @property
     def auto_auth(self) -> bool:
         """True — входить на площадки автоматически через Telegram-сессию."""

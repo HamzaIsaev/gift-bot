@@ -8,3 +8,4 @@ Kurigram==2.2.6
 aportalsmp==1.3
 tonnelmp==1.2
 amrkt==1.6.0
+playwright==1.64.0

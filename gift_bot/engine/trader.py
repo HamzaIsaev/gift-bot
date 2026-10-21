@@ -30,7 +30,8 @@ FOLLOW_FLOOR_AFTER = timedelta(minutes=30)
 class Trader:
     def __init__(self, settings: Settings, db: Database, markets: dict[str, MarketAdapter],
                  pricer: Pricer, strategy: Strategy, risk: RiskManager,
-                 executor: Executor, notify: Notify):
+                 executor: Executor, notify: Notify,
+                 on_auth_missing: Callable[[], Awaitable[None]] | None = None):
         self.s = settings
         self.db = db
         self.markets = markets
@@ -39,6 +40,7 @@ class Trader:
         self.risk = risk
         self.executor = executor
         self.notify = notify
+        self.on_auth_missing = on_auth_missing
         self._seen: dict[str, deque[str]] = {m: deque(maxlen=SEEN_MAX) for m in markets}
         self._seen_set: dict[str, set[str]] = {m: set() for m in markets}
         self._warmed: set[str] = set()
@@ -73,13 +75,17 @@ class Trader:
             except asyncio.CancelledError:
                 raise
             except AuthMissing:
-                if market not in self._auth_warned:
+                if self.on_auth_missing:  # есть сессия Telegram Web — пробуем обновить вход сами
+                    asyncio.create_task(self.on_auth_missing())
+                elif market not in self._auth_warned:
                     self._auth_warned.add(market)
                     await self.notify(f"🔑 {market}: нет данных входа. Отправьте /auth — там инструкция.")
                 await asyncio.sleep(60)
                 continue
             except Exception as e:
                 self._errors[market] += 1
+                if self.on_auth_missing and self._errors[market] >= 3:  # возможно, вход устарел
+                    asyncio.create_task(self.on_auth_missing())
                 log.warning("%s: ошибка цикла (%d подряд): %s", market, self._errors[market], e)
                 if self._errors[market] == 5:
                     await self.notify(f"⚠️ {market}: 5 ошибок подряд — {type(e).__name__}: {str(e)[:200]}\n"

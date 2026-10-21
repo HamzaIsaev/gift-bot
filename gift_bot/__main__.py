@@ -16,6 +16,7 @@ from gift_bot.logging_setup import setup_logging
 from gift_bot.markets.base import MarketAdapter
 from gift_bot.markets.manual_auth import ManualAuthStore
 from gift_bot.markets.mrkt import MrktMarket
+from gift_bot.markets.web_login import WebAuthRefresher
 from gift_bot.markets.portals import PortalsMarket
 from gift_bot.markets.telegram_auth import TelegramAuth
 from gift_bot.markets.tonnel import TonnelMarket
@@ -74,7 +75,15 @@ async def main() -> None:
     pricer = Pricer(db, markets, s)
     strategy = Strategy(db, pricer, risk, s)
     bot = ControlBot(s, db, risk, store, markets)
-    trader = Trader(s, db, markets, pricer, strategy, risk, VirtualExecutor(db), bot.notify)
+    refresher = None
+    if tg is None and os.path.isdir(s.web_profile_dir):
+        async def save_auth(market: str, data: str) -> None:
+            await store.set(market, data)
+            markets[market].reset_auth()
+
+        refresher = WebAuthRefresher(s.web_profile_dir, s.web_login_targets(), save_auth, bot.notify)
+    trader = Trader(s, db, markets, pricer, strategy, risk, VirtualExecutor(db), bot.notify,
+                    on_auth_missing=refresher.refresh if refresher else None)
 
     scheduler = AsyncIOScheduler(timezone=s.timezone)
 
@@ -98,7 +107,10 @@ async def main() -> None:
             start_msg += f"\n🔑 Ручной вход: нужны данные для {', '.join(missing)}. Инструкция: /auth"
     await bot.notify(start_msg)
     try:
-        await asyncio.gather(bot.run(), trader.run())
+        jobs = [bot.run(), trader.run()]
+        if refresher:
+            jobs.append(refresher.run_periodic(s.web_refresh_hours))
+        await asyncio.gather(*jobs)
     finally:
         scheduler.shutdown(wait=False)
         if panel:
