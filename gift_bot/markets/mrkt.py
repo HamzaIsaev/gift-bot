@@ -50,6 +50,10 @@ class MrktMarket(MarketAdapter):
         self._proxy = proxy
         self._token: str | None = None
 
+    def reset_auth(self) -> None:
+        super().reset_auth()
+        self._token = None
+
     async def _login(self, force: bool) -> str:
         if self._token and not force:
             return self._token

@@ -52,16 +52,22 @@ fi
 if [ "$(get_env ADMIN_IDS)" = "[123456789]" ] || [ -z "$(get_env ADMIN_IDS)" ]; then
   read -r -p "Ваш Telegram id (от @userinfobot): " v; set_env ADMIN_IDS "[$v]"
 fi
-if [ -z "$(get_env TG_API_ID)" ]; then
-  read -r -p "api_id с my.telegram.org: " v; set_env TG_API_ID "$v"
+if [ -z "$(get_env TG_API_ID)" ] && [ "$(get_env SKIP_API)" != "1" ]; then
+  echo "api_id с my.telegram.org. Если получить не удаётся — просто нажмите Enter:"
+  echo "тогда вход на площадки будет через команду /auth в боте (инструкция там)."
+  read -r -p "api_id: " v
+  if [ -z "$v" ]; then set_env SKIP_API 1; else set_env TG_API_ID "$v"; fi
 fi
-if [ -z "$(get_env TG_API_HASH)" ]; then
+if [ -n "$(get_env TG_API_ID)" ] && [ -z "$(get_env TG_API_HASH)" ]; then
   read -r -s -p "api_hash с my.telegram.org: " v; echo; set_env TG_API_HASH "$v"
 fi
-if [ -z "$(get_env TG_SESSION_STRING)" ]; then
+if [ -n "$(get_env TG_API_ID)" ] && [ -z "$(get_env TG_SESSION_STRING)" ]; then
   say "Вход в Telegram-аккаунт для площадок: введите телефон этого аккаунта и код из Telegram."
   TG_API_ID="$(get_env TG_API_ID)" TG_API_HASH="$(get_env TG_API_HASH)" \
     .venv/bin/python scripts/login.py --write-env
+fi
+if [ -z "$(get_env TG_API_ID)" ]; then
+  say "Вход на площадки — ручной: после запуска напишите боту /auth и следуйте инструкции."
 fi
 
 # --- Запуск ---

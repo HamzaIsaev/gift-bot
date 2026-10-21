@@ -12,6 +12,7 @@ from gift_bot.config import Settings
 from gift_bot.engine.strategy import Evaluation, Plan, Strategy
 from gift_bot.execution.base import Executor
 from gift_bot.markets.base import MarketAdapter
+from gift_bot.markets.manual_auth import AuthMissing
 from gift_bot.models import Listing, parse_dt, utcnow
 from gift_bot.pricing.valuation import Pricer
 from gift_bot.risk.limits import RiskManager
@@ -42,6 +43,7 @@ class Trader:
         self._seen_set: dict[str, set[str]] = {m: set() for m in markets}
         self._warmed: set[str] = set()
         self._errors: dict[str, int] = {m: 0 for m in markets}
+        self._auth_warned: set[str] = set()
 
     # --- запуск ---
     async def run(self) -> None:
@@ -64,16 +66,24 @@ class Trader:
         while True:
             try:
                 await self._market_loop_once(market)
+                self._auth_warned.discard(market)
                 if self._errors[market] >= 5:
                     await self.notify(f"✅ {market}: связь восстановлена")
                 self._errors[market] = 0
             except asyncio.CancelledError:
                 raise
+            except AuthMissing:
+                if market not in self._auth_warned:
+                    self._auth_warned.add(market)
+                    await self.notify(f"🔑 {market}: нет данных входа. Отправьте /auth — там инструкция.")
+                await asyncio.sleep(60)
+                continue
             except Exception as e:
                 self._errors[market] += 1
                 log.warning("%s: ошибка цикла (%d подряд): %s", market, self._errors[market], e)
                 if self._errors[market] == 5:
-                    await self.notify(f"⚠️ {market}: 5 ошибок подряд — {type(e).__name__}: {str(e)[:200]}")
+                    await self.notify(f"⚠️ {market}: 5 ошибок подряд — {type(e).__name__}: {str(e)[:200]}\n"
+                                      f"Если вход ручной, возможно, устарели данные: обновите /auth {market}")
                 await asyncio.sleep(min(60, self.s.poll_interval_sec * self._errors[market]))
             await asyncio.sleep(self.s.poll_interval_sec)
 

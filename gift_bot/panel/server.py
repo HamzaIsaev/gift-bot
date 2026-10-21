@@ -16,6 +16,8 @@ from typing import Awaitable, Callable
 from aiohttp import web
 
 from gift_bot.config import Settings
+from gift_bot.markets.base import MarketAdapter
+from gift_bot.markets.manual_auth import ManualAuthStore
 from gift_bot.models import parse_dt
 from gift_bot.reports.weekly import week_stats
 from gift_bot.risk.limits import LIMIT_NAMES, LIVE, OBSERVE, RiskManager
@@ -29,11 +31,14 @@ Notify = Callable[[str], Awaitable[None]]
 
 
 class Panel:
-    def __init__(self, settings: Settings, db: Database, risk: RiskManager, notify: Notify):
+    def __init__(self, settings: Settings, db: Database, risk: RiskManager, notify: Notify,
+                 store: ManualAuthStore | None = None, markets: dict[str, MarketAdapter] | None = None):
         self.s = settings
         self.db = db
         self.risk = risk
         self.notify = notify
+        self.store = store or ManualAuthStore(db)
+        self.markets = markets or {}
         self.app = web.Application(middlewares=[self._auth, self._csrf])
         self.app.add_routes([
             web.get("/", self.index),
@@ -44,6 +49,7 @@ class Panel:
             web.post("/api/resume", self.resume),
             web.post("/api/mode", self.mode),
             web.post("/api/limits", self.limits),
+            web.post("/api/auth", self.auth),
         ])
         self._runner: web.AppRunner | None = None
 
@@ -126,6 +132,7 @@ class Panel:
             "min_profit_pct": self.s.min_profit_pct,
             "adaptive": self.s.adaptive,
             "positions": [dict(p) for p in positions],
+            "auth": {"auto": self.s.auto_auth, "markets": await self.store.status()},
         })
 
     async def trades(self, _: web.Request) -> web.Response:
@@ -168,3 +175,15 @@ class Panel:
             return web.json_response({"error": str(e)}, status=400)
         await self.notify(f"⚙️ Лимит изменён из админ-панели: {done}")
         return web.json_response({"ok": True, "message": done})
+
+    async def auth(self, request: web.Request) -> web.Response:
+        body = await request.json()
+        market = str(body.get("market", "")).lower()
+        try:
+            await self.store.set(market, str(body.get("data", "")))
+        except ValueError as e:
+            return web.json_response({"error": str(e)}, status=400)
+        if market in self.markets:
+            self.markets[market].reset_auth()
+        await self.notify(f"🔑 {market}: данные входа обновлены из админ-панели")
+        return web.json_response({"ok": True})

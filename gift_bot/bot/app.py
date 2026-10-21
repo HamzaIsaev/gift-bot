@@ -13,6 +13,8 @@ from aiogram.types import (CallbackQuery, InlineKeyboardButton, InlineKeyboardMa
 
 from gift_bot.bot.texts import mk, ton
 from gift_bot.config import Settings
+from gift_bot.markets.base import MarketAdapter
+from gift_bot.markets.manual_auth import CONSOLE_SNIPPET, MARKETS, ManualAuthStore
 from gift_bot.reports.weekly import build_report
 from gift_bot.risk.limits import LIMIT_NAMES, LIVE, OBSERVE, RiskManager
 from gift_bot.storage.db import Database
@@ -29,10 +31,13 @@ MODE_TITLES = {OBSERVE: "🧪 наблюдение (без реальных сд
 
 
 class ControlBot:
-    def __init__(self, settings: Settings, db: Database, risk: RiskManager):
+    def __init__(self, settings: Settings, db: Database, risk: RiskManager,
+                 store: ManualAuthStore | None = None, markets: dict[str, MarketAdapter] | None = None):
         self.s = settings
         self.db = db
         self.risk = risk
+        self.store = store or ManualAuthStore(db)
+        self.markets = markets or {}
         self.bot = Bot(settings.bot_token.get_secret_value(),
                        default=DefaultBotProperties(parse_mode=ParseMode.HTML))
         self.dp = Dispatcher()
@@ -82,6 +87,29 @@ class ControlBot:
             "Изменить: <code>/limits max_trade 25</code>"
         )
 
+    async def auth_text(self) -> str:
+        status = await self.store.status()
+        lines = ["🔑 <b>Вход на площадки</b>"]
+        for m in MARKETS:
+            st = status[m]
+            mark = f"✅ данные от {st['age_hours']:.0f} ч назад" if st["set"] else "❌ нет данных"
+            lines.append(f"{mk(m)}: {mark}")
+        if self.s.auto_auth:
+            lines.append("\nСейчас включён автоматический вход через api_id — /auth не нужен.")
+        lines += [
+            "",
+            "<b>Как получить данные (Chrome на Mac):</b>",
+            "1. Откройте web.telegram.org/k и войдите во второй аккаунт",
+            "2. Откройте мини-приложение: @portals, @Tonnel_Network_bot или @mrkt",
+            "3. Нажмите Cmd+Option+J — откроется консоль",
+            "4. Вверху консоли в списке <b>top</b> выберите фрейм площадки",
+            f"5. Введите <code>{CONSOLE_SNIPPET}</code> и Enter — данные скопированы",
+            "6. Отправьте сюда: <code>/auth portals </code> и вставьте (Cmd+V)",
+            "",
+            "Сообщение с данными бот сразу удалит. Данные устаревают — бот напомнит обновить.",
+        ]
+        return "\n".join(lines)
+
     def mode_keyboard(self) -> InlineKeyboardMarkup:
         rows = [[InlineKeyboardButton(text="🧪 Наблюдение", callback_data="mode:observe"),
                  InlineKeyboardButton(text="💰 Боевой", callback_data="mode:live")]]
@@ -99,7 +127,7 @@ class ControlBot:
         @r.message(CommandStart())
         async def start(m: Message):
             await m.answer("Бот торговли Telegram-подарками. Меню ниже.\n"
-                           "/status /mode /limits /report /stop", reply_markup=MENU)
+                           "/status /mode /limits /report /stop /auth", reply_markup=MENU)
 
         @r.message(Command("stop"))
         @r.message(F.text == BTN_STOP)
@@ -152,6 +180,27 @@ class ControlBot:
             elif args:
                 await m.answer("Не понял. Пример: <code>/limits max_trade 25</code>")
             await m.answer(self.limits_text())
+
+        @r.message(Command("auth"))
+        async def auth(m: Message, command: CommandObject):
+            args = (command.args or "").split(maxsplit=1)
+            if len(args) < 2:
+                await m.answer(await self.auth_text())
+                return
+            market, raw = args[0].lower(), args[1]
+            try:
+                await m.delete()  # в сообщении данные входа — не оставляем в чате
+            except Exception:
+                pass
+            try:
+                when = await self.store.set(market, raw)
+            except ValueError as e:
+                await m.answer(f"❌ {escape(str(e))}")
+                return
+            if market in self.markets:
+                self.markets[market].reset_auth()
+            await m.answer(f"✅ {mk(market)}: данные входа сохранены "
+                           f"(выданы {when.astimezone(self.risk.tz):%d.%m %H:%M}). Подключаюсь…")
 
         @r.message(Command("report"))
         async def report(m: Message):

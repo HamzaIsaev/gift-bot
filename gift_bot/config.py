@@ -21,14 +21,17 @@ class MarketFees(BaseModel):
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore",
+                                      env_ignore_empty=True)
 
     # --- Секреты (только .env) ---
     bot_token: SecretStr = Field(..., alias="BOT_TOKEN")
     admin_ids: list[int] = Field(..., alias="ADMIN_IDS")
-    tg_api_id: int = Field(..., alias="TG_API_ID")
-    tg_api_hash: SecretStr = Field(..., alias="TG_API_HASH")
-    tg_session_string: SecretStr = Field(..., alias="TG_SESSION_STRING")
+    # Автоматический вход на площадки (если my.telegram.org недоступен — оставить пустыми,
+    # тогда вход ручной: /auth <площадка> <данные из Telegram Web>)
+    tg_api_id: int | None = Field(None, alias="TG_API_ID")
+    tg_api_hash: SecretStr | None = Field(None, alias="TG_API_HASH")
+    tg_session_string: SecretStr | None = Field(None, alias="TG_SESSION_STRING")
     # Запасной вариант для Tonnel: initData, скопированный из браузера
     tonnel_auth_data: SecretStr | None = Field(None, alias="TONNEL_AUTH_DATA")
     # Прокси для запросов к площадкам (необязательно), формат http://user:pass@host:port
@@ -89,6 +92,12 @@ class Settings(BaseSettings):
     # --- Еженедельный отчёт ---
     report_weekday: str = Field("mon", alias="REPORT_WEEKDAY")
     report_hour: int = Field(9, alias="REPORT_HOUR")
+
+    @property
+    def auto_auth(self) -> bool:
+        """True — входить на площадки автоматически через Telegram-сессию."""
+        return bool(self.tg_api_id and self.tg_api_hash and self.tg_session_string
+                    and self.tg_session_string.get_secret_value())
 
     def fees(self, market: str) -> MarketFees:
         return getattr(self, f"fees_{market}")

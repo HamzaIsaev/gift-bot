@@ -73,6 +73,11 @@ td{padding:10px 6px;border-bottom:1px solid #151c29}
   padding:12px 20px;border-radius:999px;font-weight:600;transition:transform .3s;box-shadow:0 10px 30px rgba(0,0,0,.5);z-index:9}
 .toast.show{transform:translateX(-50%) translateY(0)}
 .hidden{display:none}
+.auth-row{display:grid;grid-template-columns:110px 1fr auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid #151c29}
+.auth-row input{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:999px;padding:9px 14px;font:inherit}
+.auth-row input:focus{outline:none;border-color:var(--ton);box-shadow:0 0 0 3px rgba(0,152,234,.25)}
+code{background:#1a2333;padding:1px 6px;border-radius:6px;color:#9fd8ff}
+@media (max-width:600px){.auth-row{grid-template-columns:1fr}}
 @media (max-width:900px){.grid4{grid-template-columns:1fr 1fr}.grid2,.grid2e{grid-template-columns:1fr}}
 @media (max-width:480px){.grid4{grid-template-columns:1fr}.val{font-size:24px}.btn{padding:11px 18px}}
 </style>
@@ -113,6 +118,12 @@ td{padding:10px 6px;border-bottom:1px solid #151c29}
     <div class="grid2e">
       <div class="card"><h3>Открытые позиции</h3><div class="scroll"><table><thead><tr><th>Подарок</th><th>Площадка</th><th>Куплено</th><th>Выставлено</th><th>Мин.</th></tr></thead><tbody id="positions"></tbody></table></div></div>
       <div class="card"><h3>Лучшие модели недели</h3><div class="scroll"><table><thead><tr><th>Модель</th><th style="text-align:right">Прибыль, TON</th></tr></thead><tbody id="models"></tbody></table></div></div>
+    </div>
+    <div class="card" id="authCard" style="margin-top:14px">
+      <h3>Вход на площадки</h3>
+      <div class="sub" style="margin:-6px 0 12px">Данные из Telegram Web: откройте мини-приложение, Cmd+Option+J, выберите фрейм площадки,
+        введите <code>copy(Telegram.WebApp.initData)</code> и вставьте сюда.</div>
+      <div id="authRows"></div>
     </div>
   </section>
 
@@ -186,6 +197,14 @@ function render(o){
   $("minProfit").textContent=o.min_profit_pct+"%"+(o.adaptive?" · адаптивно":"");
 
   $("positions").innerHTML=o.positions.length?o.positions.map(p=>`<tr><td>${esc(p.title)} ${p.mode==="virtual"?'<span class="tag v">вирт</span>':""}</td><td>${MK[p.market]||esc(p.market)}</td><td>${n2(p.buy_cost)}</td><td><b>${n2(p.ask_price)}</b></td><td>${n2(p.min_price)}</td></tr>`).join(""):`<tr><td colspan="5" class="empty">Позиций нет</td></tr>`;
+  const a=o.auth;$("authCard").classList.toggle("hidden",a.auto);
+  if(!a.auto&&!document.querySelector(".auth-row input:focus")){
+    $("authRows").innerHTML=["portals","tonnel","mrkt"].map(m=>{const st=a.markets[m];
+      const badge=st.set?`<span class="tag buy">✅ ${Math.round(st.age_hours)} ч назад</span>`:`<span class="tag" style="color:#ff8a8f">❌ нет данных</span>`;
+      return `<div class="auth-row"><div><b>${MK[m]}</b><br>${badge}</div><input id="auth-${m}" placeholder="вставьте данные входа…" autocomplete="off"><button class="btn sm" data-auth="${m}">Сохранить</button></div>`}).join("");
+    document.querySelectorAll("[data-auth]").forEach(b=>b.onclick=async()=>{const m=b.dataset.auth;
+      try{await api("/api/auth",{market:m,data:$("auth-"+m).value});toast("✅ "+MK[m]+": вход сохранён");$("auth-"+m).value="";refresh()}catch(err){toast(err.message)}});
+  }
   $("models").innerHTML=o.top_models.length?o.top_models.map(([m,p])=>`<tr><td>${esc(m)}</td><td style="text-align:right" class="${cls(p)}"><b>${sign(p)}</b></td></tr>`).join(""):`<tr><td colspan="2" class="empty">Пока нет сделок</td></tr>`;
 }
 

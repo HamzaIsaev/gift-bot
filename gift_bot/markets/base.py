@@ -37,6 +37,11 @@ class MarketAdapter(ABC):
             self._auth_at = time.monotonic()
         return self._auth
 
+    def reset_auth(self) -> None:
+        """Забыть данные входа — следующий запрос возьмёт свежие."""
+        self._auth = None
+        self._auth_at = 0.0
+
     async def with_auth(self, call: Callable[[str], Awaitable]):
         """Выполнить запрос; при ошибке один раз обновить авторизацию и повторить."""
         try:
