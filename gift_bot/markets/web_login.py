@@ -103,9 +103,14 @@ async def grab_init_data(profile_dir: str, targets: dict[str, tuple[str, str]], 
 
     results: dict[str, str | Exception] = {}
     async with async_playwright() as pw:
-        ctx = await pw.chromium.launch_persistent_context(
-            profile_dir, headless=headless, viewport={"width": 1200, "height": 850}, locale="ru-RU",
-            executable_path=executable_path)
+        opts = dict(headless=headless, viewport={"width": 1200, "height": 850}, locale="ru-RU")
+        if executable_path:
+            ctx = await pw.chromium.launch_persistent_context(profile_dir, executable_path=executable_path, **opts)
+        else:
+            try:  # установленный Google Chrome (отдельный профиль — ваш обычный Chrome не затрагивается)
+                ctx = await pw.chromium.launch_persistent_context(profile_dir, channel="chrome", **opts)
+            except Exception:
+                ctx = await pw.chromium.launch_persistent_context(profile_dir, **opts)
         try:
             page = ctx.pages[0] if ctx.pages else await ctx.new_page()
             await page.goto(WEB_URL)

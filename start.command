@@ -69,9 +69,13 @@ fi
 if [ -z "$(get_env TG_API_ID)" ]; then
   # План Б: вход по QR-коду через Telegram Web
   if [ ! -f .venv/.pw_ready ]; then
-    say "Скачиваю браузер для входа через Telegram Web (один раз, ~150 МБ)..."
     .venv/bin/python -m pip install -q "playwright==1.64.0"
-    .venv/bin/python -m playwright install chromium && touch .venv/.pw_ready
+    if [ -d "/Applications/Google Chrome.app" ]; then
+      touch .venv/.pw_ready            # есть Chrome — отдельный браузер не нужен
+    else
+      say "Скачиваю браузер для входа через Telegram Web (один раз, ~150 МБ)..."
+      .venv/bin/python -m playwright install chromium && touch .venv/.pw_ready
+    fi
   fi
   if [ ! -d data/tg_web_profile ] || [ "$1" = "--relogin" ]; then
     say "Вход на площадки: сейчас откроется окно браузера с QR-кодом."
