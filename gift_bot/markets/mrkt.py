@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 
-from amrkt.models import FeedResponse, Gift, GiftList, SearchParams
+from amrkt.models import Balance, FeedResponse, Gift, GiftList, PurchaseResult, SearchParams
 from curl_cffi.requests import AsyncSession
 
 from gift_bot.markets.base import MarketAdapter, MarketError
@@ -104,3 +104,36 @@ class MrktMarket(MarketAdapter):
     async def lowest_listings(self, collection: str, model: str, limit: int = 3) -> list[Listing]:
         return await self._search(collection_names=[collection], model_names=[model],
                                   ordering="Price", low_to_high=True, count=limit)
+
+    # --- торговля ---
+    async def _get(self, path: str) -> dict:
+        token = await self._login(force=False)
+        async with AsyncSession(impersonate="chrome124", proxy=self._proxy, timeout=15) as s:
+            r = await s.get(f"{API_URL}{path}", headers={**HEADERS, "Authorization": token})
+        if r.status_code == 401:
+            await self._login(force=True)
+            return await self._get(path)
+        if r.status_code != 200:
+            raise MarketError(f"mrkt {path}: {r.status_code}")
+        return r.json()
+
+    async def balance(self) -> float:
+        return Balance.model_validate(await self._get("/balance")).hard / NANO
+
+    async def buy(self, listing: Listing) -> str:
+        data = await self._post("/gifts/buy", {"Ids": [listing.listing_id]})
+        results = [PurchaseResult.model_validate(x) for x in (data if isinstance(data, list) else [])]
+        if not results:
+            raise MarketError("mrkt: покупка не подтверждена")
+        gift = results[0].user_gift
+        return gift.id if gift else listing.listing_id
+
+    async def list_for_sale(self, item_id: str, price: float) -> None:
+        await self._post("/gifts/sale", {"ids": [item_id], "prices": [int(round(price * NANO))]})
+
+    async def change_price(self, item_id: str, price: float) -> None:
+        await self._post("/gifts/sale/change-price", {"ids": [item_id], "prices": [int(round(price * NANO))]})
+
+    async def owned_ids(self) -> set[str]:
+        data = await self._post("/gifts", SearchParams(count=100, low_to_high=False).to_api_dict())
+        return {g.id for g in GiftList.model_validate(data).items}

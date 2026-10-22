@@ -103,6 +103,13 @@ class Database:
         self.conn.row_factory = aiosqlite.Row
         await self.conn.execute("PRAGMA journal_mode=WAL")
         await self.conn.executescript(SCHEMA)
+        # Миграция: поля для реальных сделок (id подарка в инвентаре, выставлен ли он)
+        cur = await self.conn.execute("PRAGMA table_info(positions)")
+        cols = {r["name"] for r in await cur.fetchall()}
+        if "item_id" not in cols:
+            await self.conn.execute("ALTER TABLE positions ADD COLUMN item_id TEXT")
+        if "listed" not in cols:
+            await self.conn.execute("ALTER TABLE positions ADD COLUMN listed INTEGER NOT NULL DEFAULT 1")
         await self.conn.commit()
 
     async def close(self) -> None:
@@ -204,6 +211,20 @@ class Database:
             "UPDATE positions SET status='sold', sold_price=?, net_proceeds=?, pnl=?, closed_at=? WHERE id=?",
             (sold_price, net, pnl, iso(utcnow()), pos_id),
         )
+        await self.conn.commit()
+
+    async def is_our_item(self, market: str, listing_id: str) -> bool:
+        cur = await self.conn.execute(
+            "SELECT 1 FROM positions WHERE status='open' AND mode='real' AND market=? AND item_id=?",
+            (market, listing_id))
+        return await cur.fetchone() is not None
+
+    async def link_signal(self, pos_id: int, signal_id: int | None) -> None:
+        await self.conn.execute("UPDATE positions SET signal_id=? WHERE id=?", (signal_id, pos_id))
+        await self.conn.commit()
+
+    async def mark_listed(self, pos_id: int) -> None:
+        await self.conn.execute("UPDATE positions SET listed=1 WHERE id=?", (pos_id,))
         await self.conn.commit()
 
     async def get_position(self, pos_id: int) -> sqlite_row | None:

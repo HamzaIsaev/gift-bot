@@ -66,6 +66,14 @@ class ControlBot:
         if mode == "virtual":
             balance = self.s.virtual_balance_ton + total
             lines.append(f"<b>Виртуальный баланс:</b> {ton(balance)} (свободно {ton(balance - in_positions)})")
+        else:
+            lines.append("<b>Балансы на площадках:</b>")
+            for name, market in self.markets.items():
+                try:
+                    lines.append(f"  {mk(name)}: {ton(await market.balance())}")
+                except Exception:
+                    lines.append(f"  {mk(name)}: — (нет связи или входа)")
+            lines.append(f"  В подарках: {ton(in_positions)}")
         lines += [
             f"<b>Прибыль сегодня:</b> {day:+.2f} TON",
             f"<b>Прибыль за всё время:</b> {total:+.2f} TON",
@@ -151,9 +159,28 @@ class ControlBot:
         async def set_mode(c: CallbackQuery):
             target = c.data.split(":", 1)[1]
             if target == LIVE:
-                await c.answer("Боевой режим ещё не реализован", show_alert=True)
-                await c.message.answer("💰 Боевой режим будет добавлен после вашего подтверждения "
-                                       "по итогам режима наблюдения.")
+                if self.risk.mode == LIVE:
+                    await c.answer("Боевой режим уже включён")
+                    return
+                lim = self.risk.limits
+                kb = InlineKeyboardMarkup(inline_keyboard=[[
+                    InlineKeyboardButton(text="✅ Да, торговать реальными TON", callback_data="mode:live_confirm"),
+                    InlineKeyboardButton(text="Отмена", callback_data="mode:observe")]])
+                await c.answer()
+                await c.message.answer(
+                    "💰 <b>Включить боевой режим?</b>\n"
+                    "Бот будет покупать и продавать подарки за реальные TON с балансов площадок.\n\n"
+                    f"Лимиты: сделка до {lim.max_trade_ton} TON, дневной убыток до {lim.max_daily_loss_ton} TON, "
+                    f"не больше {lim.max_open_positions} подарков.\n"
+                    "Для первых дней советую уменьшить: <code>/limits max_trade 5</code>\n"
+                    "Остановить в любой момент: /stop", reply_markup=kb)
+                return
+            if target == "live_confirm":
+                await self.risk.set_mode(LIVE)
+                log.warning("Боевой режим включён пользователем %s", c.from_user.id)
+                await c.answer("Боевой режим включён")
+                await c.message.edit_text(f"Сейчас: {MODE_TITLES[LIVE]}\nОстановить: /stop",
+                                          reply_markup=self.mode_keyboard())
                 return
             await self.risk.set_mode(OBSERVE)
             await c.answer("Режим наблюдения")

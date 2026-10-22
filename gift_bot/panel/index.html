@@ -180,9 +180,16 @@ function render(o){
   $("resumeBtn").classList.toggle("hidden",!o.stopped); $("stopBtn").classList.toggle("hidden",o.stopped);
   document.querySelectorAll("#modeSeg button").forEach(b=>b.classList.toggle("on",b.dataset.mode===o.mode));
 
-  $("balLbl").textContent=o.balance!=null?"Баланс (виртуальный)":"Баланс";
-  $("balance").innerHTML=o.balance!=null?n2(o.balance)+' <span class="sub">TON</span>':"—";
-  $("free").textContent=o.free!=null?"свободно "+n2(o.free)+" TON":"";
+  if(o.market_balances){
+    const vals=Object.values(o.market_balances).filter(v=>v!=null), sum=vals.reduce((a,b)=>a+b,0);
+    $("balLbl").textContent="Баланс на площадках";
+    $("balance").innerHTML=(vals.length?n2(sum+o.in_positions):"—")+' <span class="sub">TON</span>';
+    $("free").textContent=Object.entries(o.market_balances).map(([m,v])=>`${MK[m]||m} ${v==null?"—":n2(v)}`).join(" · ")+` · в подарках ${n2(o.in_positions)}`;
+  }else{
+    $("balLbl").textContent="Баланс (виртуальный)";
+    $("balance").innerHTML=o.balance!=null?n2(o.balance)+' <span class="sub">TON</span>':"—";
+    $("free").textContent=o.free!=null?"свободно "+n2(o.free)+" TON":"";
+  }
   $("today").textContent=sign(o.pnl_today); $("today").className="val "+cls(o.pnl_today);
   $("todaySub").textContent="за всё время "+sign(o.pnl_total)+" TON";
   $("week").textContent=sign(o.week.pnl); $("week").className="val "+cls(o.week.pnl);
@@ -226,8 +233,10 @@ $("tabs").onclick=e=>{const b=e.target.closest("button");if(!b)return;tab=b.data
   for(const t of ["overview","trades","signals"])$("tab-"+t).classList.toggle("hidden",t!==tab);loadTab()};
 $("stopBtn").onclick=async()=>{if(!confirm("Остановить все сделки?"))return;await api("/api/stop",{});toast("🛑 Остановлено");refresh()};
 $("resumeBtn").onclick=async()=>{await api("/api/resume",{});toast("▶ Работа возобновлена");refresh()};
-$("modeSeg").onclick=async e=>{const b=e.target.closest("button");if(!b)return;
-  try{await api("/api/mode",{mode:b.dataset.mode});toast("Режим: наблюдение");refresh()}catch(err){toast(err.message)}};
+$("modeSeg").onclick=async e=>{const b=e.target.closest("button");if(!b||b.classList.contains("on"))return;
+  const live=b.dataset.mode==="live";
+  if(live&&!confirm(`Включить БОЕВОЙ режим?\n\nБот будет покупать и продавать подарки за реальные TON.\nЛимиты: сделка до ${state.limits.max_trade} TON, дневной убыток до ${state.limits.max_daily_loss} TON, подарков до ${state.limits.max_positions}.`))return;
+  try{await api("/api/mode",{mode:b.dataset.mode,confirm:live});toast(live?"💎 Боевой режим включён":"🧪 Режим наблюдения");refresh()}catch(err){toast(err.message)}};
 document.querySelectorAll("[data-lim]").forEach(b=>b.onclick=async()=>{const k=b.dataset.lim;
   try{const r=await api("/api/limits",{name:k,value:$("lim-"+k).value});toast("✅ "+r.message);refresh()}catch(err){toast(err.message)}});
 

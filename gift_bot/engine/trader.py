@@ -30,7 +30,7 @@ FOLLOW_FLOOR_AFTER = timedelta(minutes=30)
 class Trader:
     def __init__(self, settings: Settings, db: Database, markets: dict[str, MarketAdapter],
                  pricer: Pricer, strategy: Strategy, risk: RiskManager,
-                 executor: Executor, notify: Notify,
+                 executor: Executor | dict[str, Executor], notify: Notify,
                  on_auth_missing: Callable[[], Awaitable[None]] | None = None):
         self.s = settings
         self.db = db
@@ -38,7 +38,9 @@ class Trader:
         self.pricer = pricer
         self.strategy = strategy
         self.risk = risk
-        self.executor = executor
+        # Исполнители по режимам: virtual — наблюдение, real — боевой
+        self.executors = executor if isinstance(executor, dict) else {executor.mode_db: executor}
+        self._buy_lock = asyncio.Lock()
         self.notify = notify
         self.on_auth_missing = on_auth_missing
         self._seen: dict[str, deque[str]] = {m: deque(maxlen=SEEN_MAX) for m in markets}
@@ -46,6 +48,14 @@ class Trader:
         self._warmed: set[str] = set()
         self._errors: dict[str, int] = {m: 0 for m in markets}
         self._auth_warned: set[str] = set()
+
+    @property
+    def executor(self) -> Executor | None:
+        return self.executors.get(self.risk.mode_db)
+
+    @property
+    def virtual(self) -> bool:
+        return self.risk.mode_db == "virtual"
 
     # --- запуск ---
     async def run(self) -> None:
@@ -108,8 +118,10 @@ class Trader:
 
     # --- обработка лота ---
     async def process_listing(self, lst: Listing) -> None:
-        if self.risk.stopped:
+        if self.risk.stopped or self.executor is None:
             return
+        if await self.db.is_our_item(lst.market, lst.listing_id):
+            return  # это наш собственный выставленный подарок
         ref = await self.pricer.reference_price(lst)
         if ref is not None and lst.price >= ref * PRE_FILTER_RATIO:
             return
@@ -118,19 +130,36 @@ class Trader:
             return
         if ev.arbitrage:
             await self._record(ev.arbitrage, ev, "signal", None)
-            await self.notify(texts.arbitrage_signal(ev.arbitrage, virtual=self.executor.mode_db == "virtual"))
+            await self.notify(texts.arbitrage_signal(ev.arbitrage, virtual=self.virtual))
         if ev.best is None:
             return
         if ev.reject_reason:
             await self._record(ev.best, ev, "skip", ev.reject_reason)
             return
-        reason = await self.risk.check_trade(ev.best.buy_cost)
-        if reason:
-            await self._record(ev.best, ev, "skip", reason)
-            return
-        signal_id = await self._record(ev.best, ev, "buy", None, force=True)
-        pos_id = await self.executor.buy_and_list(ev.best, signal_id)
-        await self.notify(texts.bought(ev.best, pos_id, virtual=self.executor.mode_db == "virtual"))
+        async with self._buy_lock:  # лимиты проверяются и сделка проходит по одной за раз
+            reason = await self.risk.check_trade(ev.best.buy_cost)
+            if not reason and not self.virtual:
+                try:
+                    bal = await self.executor.balance(lst.market)
+                except Exception as e:
+                    bal, reason = 0.0, f"balance_error: {e}"
+                if not reason and bal < ev.best.buy_cost:
+                    reason = f"limit:balance — на {lst.market} {bal:.2f} TON < {ev.best.buy_cost:.2f}"
+            if reason:
+                await self._record(ev.best, ev, "skip", reason)
+                return
+            executor = self.executor
+            try:
+                pos_id = await executor.buy_and_list(ev.best, 0)
+            except Exception as e:
+                log.warning("Покупка не удалась %s: %s", lst.title, e)
+                await self._record(ev.best, ev, "skip", f"buy_failed: {str(e)[:150]}", force=True)
+                if not self.virtual:
+                    await self.notify(texts.buy_failed(ev.best, e))
+                return
+            signal_id = await self._record(ev.best, ev, "buy", None, force=True)
+            await self.db.link_signal(pos_id, signal_id)
+        await self.notify(texts.bought(ev.best, pos_id, virtual=executor.mode_db == "virtual"))
 
     async def _record(self, plan: Plan, ev: Evaluation, decision: str, reason: str | None,
                       force: bool = False) -> int | None:
@@ -140,7 +169,7 @@ class Trader:
             return None
         lst = plan.listing
         return await self.db.add_signal(
-            mode=self.executor.mode_db, kind=plan.kind, market=lst.market,
+            mode=self.risk.mode_db, kind=plan.kind, market=lst.market,
             target_market=plan.target_market, listing_id=lst.listing_id, model_key=lst.key,
             title=lst.title, price=lst.price, buy_cost=plan.buy_cost, market_price=plan.market_price,
             floor_price=plan.view.floor, sales_median=plan.view.sales_median,
@@ -162,15 +191,22 @@ class Trader:
     async def manage_positions(self) -> None:
         if self.risk.stopped:  # /stop останавливает всё, включая переоценку
             return
-        for pos in await self.db.open_positions(self.executor.mode_db):
-            sold = await self.executor.sold_price(pos)
-            if sold is not None:
-                await self._close(pos, sold)
+        # Ведём позиции обоих режимов: смена режима не бросает уже купленные подарки
+        for pos in await self.db.open_positions():
+            executor = self.executors.get(pos["mode"])
+            if executor is None:
                 continue
-            new_ask = await self._next_ask(pos)
-            if new_ask is not None:
-                await self.executor.reprice(pos, new_ask)
-                await self.notify(texts.repriced(pos, new_ask, virtual=pos["mode"] == "virtual"))
+            try:
+                sold = await executor.sold_price(pos)
+                if sold is not None:
+                    await self._close(pos, sold)
+                    continue
+                new_ask = await self._next_ask(pos)
+                if new_ask is not None:
+                    await executor.reprice(pos, new_ask)
+                    await self.notify(texts.repriced(pos, new_ask, virtual=pos["mode"] == "virtual"))
+            except Exception as e:
+                log.warning("Позиция #%s: %s", pos["id"], e)
         if await self.risk.check_daily_loss():
             await self.notify(texts.daily_loss_hit(await self.risk.daily_pnl(), self.risk.limits.max_daily_loss_ton))
 
@@ -189,7 +225,8 @@ class Trader:
             lows = await self.pricer.lowest(pos["market"], Listing(
                 market=pos["market"], listing_id=pos["listing_id"], collection=pos["collection"],
                 model=pos["model"], backdrop="", symbol="", number=None, price=ask))
-            others = [x.price for x in lows if x.listing_id != pos["listing_id"]]
+            ours = {pos["listing_id"], pos["item_id"]}
+            others = [x.price for x in lows if x.listing_id not in ours]
             if others:
                 market_floor = min(others)
                 if market_floor < ask:

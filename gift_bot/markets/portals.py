@@ -56,3 +56,28 @@ class PortalsMarket(MarketAdapter):
             log.debug("portals floor %s/%s: %s", collection, model, e)
             return []
         return [_listing(g) for g in res if g.price > 0]
+
+    # --- торговля ---
+    async def balance(self) -> float:
+        from aportalsmp import account
+        return (await self.with_auth(lambda a: account.myBalances(authData=a))).balance
+
+    async def buy(self, listing: Listing) -> str:
+        await self.once(lambda a: pm.buy(nft_id=listing.listing_id, price=listing.price, authData=a))
+        return listing.listing_id  # у Portals id подарка после покупки не меняется
+
+    async def list_for_sale(self, item_id: str, price: float) -> None:
+        res = await self.once(lambda a: pm.sale(nft_id=item_id, price=float(price), authData=a))
+        failed = getattr(res, "failed_nfts", None)
+        if failed:
+            raise RuntimeError(f"portals: не удалось выставить {item_id}: {failed}")
+
+    async def change_price(self, item_id: str, price: float) -> None:
+        await self.once(lambda a: pm.changePrice(nft_id=item_id, price=float(price), authData=a))
+
+    async def owned_ids(self) -> set[str]:
+        ids: set[str] = set()
+        for listed in (True, False):
+            res = await self.with_auth(lambda a, l=listed: pm.myPortalsGifts(limit=100, listed=l, authData=a))
+            ids |= {str(g.id) for g in res}
+        return ids

@@ -8,6 +8,7 @@ from __future__ import annotations
 import base64
 import hmac
 import logging
+import time
 from collections import defaultdict
 from datetime import timedelta
 from pathlib import Path
@@ -52,6 +53,8 @@ class Panel:
             web.post("/api/auth", self.auth),
         ])
         self._runner: web.AppRunner | None = None
+        self._bal: dict[str, float | None] = {}
+        self._bal_at = -1e9
 
     # --- запуск ---
     async def start(self) -> None:
@@ -133,6 +136,8 @@ class Panel:
             "adaptive": self.s.adaptive,
             "positions": [dict(p) for p in positions],
             "auth": {"auto": self.s.auto_auth, "markets": await self.store.status()},
+            "market_balances": await self._balances() if mode == "real" else None,
+            "in_positions": in_positions,
         })
 
     async def trades(self, _: web.Request) -> web.Response:
@@ -155,14 +160,33 @@ class Panel:
         return web.json_response({"ok": True})
 
     async def mode(self, request: web.Request) -> web.Response:
-        target = (await request.json()).get("mode")
-        if target == LIVE:
-            return web.json_response(
-                {"error": "Боевой режим будет добавлен после подтверждения по итогам наблюдения"}, status=400)
-        if target != OBSERVE:
+        body = await request.json()
+        target = body.get("mode")
+        if target not in (OBSERVE, LIVE):
             return web.json_response({"error": "неизвестный режим"}, status=400)
-        await self.risk.set_mode(OBSERVE)
+        if target == LIVE and body.get("confirm") is not True:
+            return web.json_response({"error": "нужно подтверждение"}, status=400)
+        if target != self.risk.mode:
+            await self.risk.set_mode(target)
+            if target == LIVE:
+                log.warning("Боевой режим включён из админ-панели")
+                await self.notify("💰 <b>Боевой режим включён из админ-панели.</b> Остановить: /stop")
+            else:
+                await self.notify("🧪 Режим наблюдения включён из админ-панели.")
         return web.json_response({"ok": True})
+
+    async def _balances(self) -> dict[str, float | None]:
+        """Балансы площадок (кэш 60 с — панель обновляется каждые 10 с)."""
+        if time.monotonic() - self._bal_at < 60:
+            return self._bal
+        out: dict[str, float | None] = {}
+        for name, market in self.markets.items():
+            try:
+                out[name] = round(await market.balance(), 4)
+            except Exception:
+                out[name] = None
+        self._bal, self._bal_at = out, time.monotonic()
+        return out
 
     async def limits(self, request: web.Request) -> web.Response:
         body = await request.json()

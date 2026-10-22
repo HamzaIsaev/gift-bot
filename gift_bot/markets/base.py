@@ -49,6 +49,10 @@ class MarketAdapter(ABC):
         except Exception:
             return await call(await self.auth(force=True))
 
+    async def once(self, call: Callable[[str], Awaitable]):
+        """Для торговых операций: без повтора — иначе можно купить дважды."""
+        return await call(await self.auth())
+
     @abstractmethod
     async def latest_listings(self, limit: int = 30) -> list[Listing]:
         """Самые свежие лоты."""
@@ -60,3 +64,22 @@ class MarketAdapter(ABC):
     @abstractmethod
     async def lowest_listings(self, collection: str, model: str, limit: int = 3) -> list[Listing]:
         """Самые дешёвые лоты конкретной модели (для расчёта floor)."""
+
+    # --- торговля (боевой режим) ---
+    async def balance(self) -> float:
+        """Свободный баланс на площадке, TON."""
+        raise NotImplementedError
+
+    async def buy(self, listing: Listing) -> str:
+        """Купить лот. Возвращает id подарка в нашем инвентаре на площадке."""
+        raise NotImplementedError
+
+    async def list_for_sale(self, item_id: str, price: float) -> None:
+        raise NotImplementedError
+
+    async def change_price(self, item_id: str, price: float) -> None:
+        raise NotImplementedError
+
+    async def owned_ids(self) -> set[str]:
+        """id всех наших подарков на площадке (выставленных и нет)."""
+        raise NotImplementedError

@@ -32,6 +32,12 @@ def bought(plan, pos_id: int, virtual: bool) -> str:
     )
 
 
+def buy_failed(plan, err: Exception) -> str:
+    lst = plan.listing
+    return (f"⚠️ <b>Покупка не удалась</b> · {mk(lst.market)}\n{escape(lst.title)} за {ton(lst.price)}\n"
+            f"{escape(str(err)[:200])}")
+
+
 def arbitrage_signal(plan, virtual: bool) -> str:
     lst = plan.listing
     return (

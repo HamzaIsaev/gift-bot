@@ -11,7 +11,7 @@ from gift_bot.bot.app import ControlBot
 from gift_bot.config import Settings
 from gift_bot.engine.strategy import Strategy
 from gift_bot.engine.trader import Trader
-from gift_bot.execution.base import VirtualExecutor
+from gift_bot.execution.base import RealExecutor, VirtualExecutor
 from gift_bot.logging_setup import setup_logging
 from gift_bot.markets.base import MarketAdapter
 from gift_bot.markets.manual_auth import ManualAuthStore
@@ -23,7 +23,7 @@ from gift_bot.markets.tonnel import TonnelMarket
 from gift_bot.panel.server import Panel
 from gift_bot.pricing.valuation import Pricer
 from gift_bot.reports.weekly import build_report
-from gift_bot.risk.limits import LIVE, OBSERVE, RiskManager
+from gift_bot.risk.limits import LIVE, RiskManager
 from gift_bot.storage.db import Database
 
 log = logging.getLogger("gift_bot")
@@ -64,9 +64,6 @@ async def main() -> None:
     await db.connect()
     risk = RiskManager(db, s)
     await risk.load()
-    if risk.mode == LIVE:  # боевой режим ещё не реализован — на всякий случай
-        await risk.set_mode(OBSERVE)
-
     tg = None
     if s.auto_auth:
         tg = TelegramAuth(s.tg_api_id, s.tg_api_hash.get_secret_value(), s.tg_session_string.get_secret_value())
@@ -82,7 +79,8 @@ async def main() -> None:
             markets[market].reset_auth()
 
         refresher = WebAuthRefresher(s.web_profile_dir, s.web_login_targets(), save_auth, bot.notify)
-    trader = Trader(s, db, markets, pricer, strategy, risk, VirtualExecutor(db), bot.notify,
+    executors = {"virtual": VirtualExecutor(db), "real": RealExecutor(db, markets)}
+    trader = Trader(s, db, markets, pricer, strategy, risk, executors, bot.notify,
                     on_auth_missing=refresher.refresh if refresher else None)
 
     scheduler = AsyncIOScheduler(timezone=s.timezone)
@@ -98,7 +96,8 @@ async def main() -> None:
         await panel.start()
 
     log.info("Старт. Площадки: %s, режим: %s", ", ".join(markets), risk.mode)
-    start_msg = f"🚀 Бот запущен. Режим: наблюдение. Площадки: {', '.join(markets)}"
+    mode_title = "💰 БОЕВОЙ (реальные сделки)" if risk.mode == LIVE else "наблюдение"
+    start_msg = f"🚀 Бот запущен. Режим: {mode_title}. Площадки: {', '.join(markets)}"
     if risk.stopped:
         start_msg += "\n🛑 Действует /stop — сделки не совершаются."
     if tg is None:
