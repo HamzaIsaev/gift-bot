@@ -61,9 +61,9 @@ class ControlBot:
 
     async def run(self) -> None:
         if self.s.webapp_url:
-            try:  # кнопка «Панель» слева от поля ввода открывает мини-приложение
+            try:  # кнопка «APP» слева от поля ввода открывает мини-приложение
                 await self.bot.set_chat_menu_button(
-                    menu_button=MenuButtonWebApp(text="Панель", web_app=WebAppInfo(url=self.s.webapp_url)))
+                    menu_button=MenuButtonWebApp(text="APP", web_app=WebAppInfo(url=self.s.webapp_url)))
             except Exception as e:
                 log.warning("Не удалось установить кнопку мини-приложения: %s", e)
         await self.dp.start_polling(self.bot, handle_signals=False)
