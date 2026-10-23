@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Callable
 
 import aiosqlite
 
@@ -97,6 +97,15 @@ class Database:
     def __init__(self, path: str):
         self.path = path
         self.conn: aiosqlite.Connection | None = None
+        # Подписчики на изменения (админ-панель рассылает их открытым вкладкам и мини-приложению)
+        self.listeners: list[Callable[[str], None]] = []
+
+    def _changed(self, kind: str) -> None:
+        for listener in self.listeners:
+            try:
+                listener(kind)
+            except Exception:
+                pass
 
     async def connect(self) -> None:
         self.conn = await aiosqlite.connect(self.path)
@@ -129,6 +138,7 @@ class Database:
             (key, json.dumps(value)),
         )
         await self.conn.commit()
+        self._changed("settings")
 
     # --- sales ---
     async def add_sales(self, sales: list[Sale]) -> list[Sale]:
@@ -169,6 +179,7 @@ class Database:
             f"INSERT INTO signals ({cols}) VALUES ({','.join('?' * len(f))})", tuple(f.values())
         )
         await self.conn.commit()
+        self._changed("signals")
         return cur.lastrowid
 
     # --- positions ---
@@ -182,6 +193,7 @@ class Database:
             f"INSERT INTO positions ({cols}) VALUES ({','.join('?' * len(f))})", tuple(f.values())
         )
         await self.conn.commit()
+        self._changed("positions")
         return cur.lastrowid
 
     async def open_positions(self, mode: str | None = None) -> list[sqlite_row]:
@@ -205,6 +217,7 @@ class Database:
             (new_ask, iso(utcnow()), pos_id),
         )
         await self.conn.commit()
+        self._changed("positions")
 
     async def close_position(self, pos_id: int, sold_price: float, net: float, pnl: float) -> None:
         await self.conn.execute(
@@ -212,6 +225,7 @@ class Database:
             (sold_price, net, pnl, iso(utcnow()), pos_id),
         )
         await self.conn.commit()
+        self._changed("positions")
 
     async def is_our_item(self, market: str, listing_id: str) -> bool:
         cur = await self.conn.execute(
@@ -222,10 +236,12 @@ class Database:
     async def link_signal(self, pos_id: int, signal_id: int | None) -> None:
         await self.conn.execute("UPDATE positions SET signal_id=? WHERE id=?", (signal_id, pos_id))
         await self.conn.commit()
+        self._changed("positions")
 
     async def mark_listed(self, pos_id: int) -> None:
         await self.conn.execute("UPDATE positions SET listed=1 WHERE id=?", (pos_id,))
         await self.conn.commit()
+        self._changed("positions")
 
     async def get_position(self, pos_id: int) -> sqlite_row | None:
         cur = await self.conn.execute("SELECT * FROM positions WHERE id=?", (pos_id,))

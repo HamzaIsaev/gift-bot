@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import hmac
 import logging
@@ -28,6 +29,7 @@ from gift_bot.storage.db import Database
 log = logging.getLogger(__name__)
 
 INDEX = Path(__file__).with_name("index.html")
+EVENTS_HEARTBEAT_SEC = 20
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 Notify = Callable[[str], Awaitable[None]]
 
@@ -46,6 +48,7 @@ class Panel:
             web.get("/", self.index),
             web.get("/app", self.index),
             web.get("/api/overview", self.overview),
+            web.get("/api/events", self.events),
             web.get("/api/trades", self.trades),
             web.get("/api/signals", self.signals),
             web.post("/api/stop", self.stop),
@@ -57,6 +60,37 @@ class Panel:
         self._runner: web.AppRunner | None = None
         self._bal: dict[str, float | None] = {}
         self._bal_at = -1e9
+        # Живая синхронизация: каждое изменение в БД сразу уходит всем открытым панелям
+        self._subscribers: set[asyncio.Queue[str]] = set()
+        db.listeners.append(self._broadcast)
+
+    def _broadcast(self, kind: str) -> None:
+        for q in self._subscribers:
+            try:
+                q.put_nowait(kind)
+            except asyncio.QueueFull:
+                pass  # клиент и так обновится по уже стоящему в очереди событию
+
+    async def events(self, request: web.Request) -> web.StreamResponse:
+        """Поток Server-Sent Events: строка 'data: <что изменилось>' на каждое изменение."""
+        resp = web.StreamResponse(headers={
+            "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+        await resp.prepare(request)
+        q: asyncio.Queue[str] = asyncio.Queue(maxsize=20)
+        self._subscribers.add(q)
+        try:
+            await resp.write(b"data: hello\n\n")
+            while True:
+                try:
+                    kind = await asyncio.wait_for(q.get(), timeout=EVENTS_HEARTBEAT_SEC)
+                    await resp.write(f"data: {kind}\n\n".encode())
+                except asyncio.TimeoutError:
+                    await resp.write(b": ping\n\n")  # держим соединение живым через прокси
+        except (ConnectionResetError, asyncio.CancelledError):
+            pass
+        finally:
+            self._subscribers.discard(q)
+        return resp
 
     # --- запуск ---
     async def start(self) -> None:

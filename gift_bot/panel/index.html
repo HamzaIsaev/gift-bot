@@ -243,7 +243,31 @@ async function loadTab(){
   }
 }
 
-async function refresh(){try{render(await api("/api/overview"));await loadTab()}catch(e){$("stateText").textContent="нет связи с ботом";$("dot").className="dot stop"}}
+async function load(){try{render(await api("/api/overview"));await loadTab()}catch(e){$("stateText").textContent="нет связи с ботом";$("dot").className="dot stop"}}
+// Обновления склеиваются: пока идёт загрузка, новые события дают ещё ровно одну
+let busy=null, again=false;
+function refresh(){if(busy){again=true;return busy}
+  busy=load().finally(()=>{busy=null;if(again){again=false;refresh()}});return busy}
+
+// Живая синхронизация: сервер сообщает о каждом изменении (браузер ↔ мини-приложение ↔ команды бота).
+// fetch, а не EventSource — чтобы передать подпись Telegram в заголовке.
+async function liveStream(){
+  let delay=1000;
+  for(;;){
+    try{
+      const r=await fetch("/api/events",{headers:TG?{"X-Tg-Init-Data":TG.initData}:{}});
+      if(!r.ok||!r.body)throw new Error(r.status);
+      delay=1000;
+      const rd=r.body.getReader(), dec=new TextDecoder(); let buf="";
+      for(;;){const {value,done}=await rd.read(); if(done)break;
+        buf+=dec.decode(value,{stream:true});
+        let i; while((i=buf.indexOf("\n\n"))>=0){const msg=buf.slice(0,i);buf=buf.slice(i+2);
+          if(msg.startsWith("data:"))refresh()}}
+    }catch(e){}
+    await new Promise(r=>setTimeout(r,delay)); delay=Math.min(delay*2,15000);
+  }
+}
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh()});
 
 $("tabs").onclick=e=>{const b=e.target.closest("button");if(!b)return;tab=b.dataset.tab;
   document.querySelectorAll("#tabs button").forEach(x=>x.classList.toggle("on",x===b));
@@ -257,7 +281,8 @@ $("modeSeg").onclick=async e=>{const b=e.target.closest("button");if(!b||b.class
 document.querySelectorAll("[data-lim]").forEach(b=>b.onclick=async()=>{const k=b.dataset.lim;
   try{const r=await api("/api/limits",{name:k,value:$("lim-"+k).value});toast("✅ "+r.message);refresh()}catch(err){toast(err.message)}});
 
-refresh(); setInterval(refresh,10000);
+refresh(); liveStream();
+setInterval(refresh,30000);  // запасной вариант, если поток событий оборвётся
 </script>
 </body>
 </html>
