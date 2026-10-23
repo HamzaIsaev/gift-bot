@@ -2,6 +2,9 @@
 FROM mcr.microsoft.com/playwright/python:v1.64.0-noble
 WORKDIR /app
 ENV PYTHONUNBUFFERED=1 TZ=Europe/Moscow PIP_BREAK_SYSTEM_PACKAGES=1
+# Компилятор: tgcrypto (зависимость amrkt) собирается из исходников
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential python3-dev \
+    && rm -rf /var/lib/apt/lists/*
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY gift_bot ./gift_bot
