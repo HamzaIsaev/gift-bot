@@ -73,12 +73,13 @@ async def main() -> None:
     strategy = Strategy(db, pricer, risk, s)
     bot = ControlBot(s, db, risk, store, markets)
     refresher = None
-    if tg is None and os.path.isdir(s.web_profile_dir):
+    if tg is None:  # вход через Telegram Web: на Mac — окно с QR, на сервере — QR приходит в бот (/qr)
         async def save_auth(market: str, data: str) -> None:
             await store.set(market, data)
             markets[market].reset_auth()
 
         refresher = WebAuthRefresher(s.web_profile_dir, s.web_login_targets(), save_auth, bot.notify)
+        bot.refresher = refresher
     executors = {"virtual": VirtualExecutor(db), "real": RealExecutor(db, markets)}
     trader = Trader(s, db, markets, pricer, strategy, risk, executors, bot.notify,
                     on_auth_missing=refresher.refresh if refresher else None)
@@ -103,7 +104,8 @@ async def main() -> None:
     if tg is None:
         missing = [m for m, st in (await store.status()).items() if m in markets and not st["set"]]
         if missing:
-            start_msg += f"\n🔑 Ручной вход: нужны данные для {', '.join(missing)}. Инструкция: /auth"
+            start_msg += (f"\n🔑 Нужен вход на площадки ({', '.join(missing)}): отправьте /qr "
+                          f"и отсканируйте QR-код вторым аккаунтом")
     await bot.notify(start_msg)
     try:
         jobs = [bot.run(), trader.run()]

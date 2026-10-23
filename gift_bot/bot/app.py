@@ -1,6 +1,7 @@
 """Telegram-бот управления: меню, команды, уведомления. Доступ только для ADMIN_IDS."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from html import escape
 
@@ -8,7 +9,7 @@ from aiogram import Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import Command, CommandObject, CommandStart
-from aiogram.types import (CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup,
+from aiogram.types import (BufferedInputFile, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup,
                            KeyboardButton, Message, ReplyKeyboardMarkup)
 
 from gift_bot.bot.texts import mk, ton
@@ -38,6 +39,7 @@ class ControlBot:
         self.risk = risk
         self.store = store or ManualAuthStore(db)
         self.markets = markets or {}
+        self.refresher = None  # WebAuthRefresher — вход по QR через Telegram Web (/qr)
         self.bot = Bot(settings.bot_token.get_secret_value(),
                        default=DefaultBotProperties(parse_mode=ParseMode.HTML))
         self.dp = Dispatcher()
@@ -49,6 +51,13 @@ class ControlBot:
                 await self.bot.send_message(uid, text)
             except Exception as e:
                 log.warning("Не удалось отправить уведомление %s: %s", uid, e)
+
+    async def send_photo(self, png: bytes, caption: str) -> None:
+        for uid in self.s.admin_ids:
+            try:
+                await self.bot.send_photo(uid, BufferedInputFile(png, "qr.png"), caption=caption)
+            except Exception as e:
+                log.warning("Не удалось отправить фото %s: %s", uid, e)
 
     async def run(self) -> None:
         await self.dp.start_polling(self.bot, handle_signals=False)
@@ -118,6 +127,12 @@ class ControlBot:
         ]
         return "\n".join(lines)
 
+    async def _qr_login(self, chat_id: int) -> None:
+        result = await self.refresher.login_via_bot(self.send_photo)
+        for name, market in self.markets.items():
+            market.reset_auth()
+        await self.bot.send_message(chat_id, result)
+
     def mode_keyboard(self) -> InlineKeyboardMarkup:
         rows = [[InlineKeyboardButton(text="🧪 Наблюдение", callback_data="mode:observe"),
                  InlineKeyboardButton(text="💰 Боевой", callback_data="mode:live")]]
@@ -135,7 +150,7 @@ class ControlBot:
         @r.message(CommandStart())
         async def start(m: Message):
             await m.answer("Бот торговли Telegram-подарками. Меню ниже.\n"
-                           "/status /mode /limits /report /stop /auth", reply_markup=MENU)
+                           "/status /mode /limits /report /stop /qr /auth", reply_markup=MENU)
 
         @r.message(Command("stop"))
         @r.message(F.text == BTN_STOP)
@@ -207,6 +222,15 @@ class ControlBot:
             elif args:
                 await m.answer("Не понял. Пример: <code>/limits max_trade 25</code>")
             await m.answer(self.limits_text())
+
+        @r.message(Command("qr"))
+        async def qr(m: Message):
+            if self.refresher is None:
+                await m.answer("Вход по QR не нужен: включён автоматический вход через api_id.")
+                return
+            await m.answer("⏳ Открываю Telegram Web… Через несколько секунд пришлю QR-код.\n"
+                           "Если на втором аккаунте стоит облачный пароль (2FA), временно отключите его.")
+            asyncio.create_task(self._qr_login(m.chat.id))
 
         @r.message(Command("auth"))
         async def auth(m: Message, command: CommandObject):

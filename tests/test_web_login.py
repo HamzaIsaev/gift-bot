@@ -19,6 +19,7 @@ INIT = "query_id=AAE&user=%7B%22id%22%3A1%7D&auth_date=1760000000&hash=abc"
 FAKE_TG = """<!doctype html><html><body><script>
 const params = new URLSearchParams(location.hash.replace(/^#\\?/, ''));
 if (location.search.includes('login')) localStorage.setItem('user_auth', '{"id":1}');
+if (location.search.includes('later')) setTimeout(() => localStorage.setItem('user_auth', '{"id":1}'), 6000);
 const addr = params.get('tgaddr');
 if (addr && localStorage.getItem('user_auth')) {
   const bot = new URLSearchParams(addr.split('?')[1]).get('domain');
@@ -66,5 +67,29 @@ async def test_grab_init_data_end_to_end(tmp_path, monkeypatch):
         res = await grab_init_data(profile, {"tonnel": ("Tonnel_Network_bot", "gifts")},
                                    headless=True, executable_path=CHROME)
         assert res == {"tonnel": "INIT_Tonnel_Network_bot"}
+    finally:
+        await server.close()
+
+
+@pytest.mark.skipif(not os.path.exists(CHROME), reason="нет Chromium")
+async def test_qr_screenshots_sent_until_login(tmp_path, monkeypatch):
+    app = web.Application()
+    app.router.add_get("/k/", lambda r: web.Response(text=FAKE_TG, content_type="text/html"))
+    app.router.add_get("/app/{bot}", lambda r: web.Response(text="<html>app</html>", content_type="text/html"))
+    server = TestServer(app)
+    await server.start_server()
+    try:
+        monkeypatch.setattr(web_login, "WEB_URL", str(server.make_url("/k/")) + "?later=1")
+        monkeypatch.setattr(web_login, "QR_RESEND_SEC", 1)
+        monkeypatch.setattr(web_login, "APP_WAIT", 10)
+        shots: list[bytes] = []
+
+        async def on_qr(png: bytes) -> None:
+            shots.append(png)
+
+        res = await grab_init_data(str(tmp_path / "p"), {"mrkt": ("mrkt", "app")}, headless=True,
+                                   executable_path=CHROME, on_qr=on_qr)
+        assert res == {"mrkt": "INIT_mrkt"}
+        assert shots and shots[0][:4] == b"\x89PNG"   # пользователю ушли снимки QR
     finally:
         await server.close()

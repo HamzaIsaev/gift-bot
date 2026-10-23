@@ -21,6 +21,7 @@ WEB_URL = "https://web.telegram.org/k/"
 LOGIN_WAIT_INTERACTIVE = 300   # секунд на сканирование QR
 LOGIN_WAIT_HEADLESS = 40
 APP_WAIT = 40
+QR_RESEND_SEC = 25
 CONFIRM_RE = re.compile(r"^\s*(open|launch|start|confirm|открыть|запустить|подтвердить|начать)\b", re.I)
 
 Status = Callable[[str], None]
@@ -49,16 +50,24 @@ async def _logged_in(page) -> bool:
         return False
 
 
-async def _wait_login(page, timeout: float, status: Status) -> None:
+async def _wait_login(page, timeout: float, status: Status,
+                      on_qr: Callable[[bytes], Awaitable[None]] | None = None) -> None:
     if await _logged_in(page):
         return
-    status("Отсканируйте QR-код в окне браузера: Telegram на телефоне → Настройки → Устройства → "
-           "Подключить устройство. Используйте ВТОРОЙ аккаунт.")
+    if on_qr is None:
+        status("Отсканируйте QR-код в окне браузера: Telegram на телефоне → Настройки → Устройства → "
+               "Подключить устройство. Используйте ВТОРОЙ аккаунт.")
     deadline = time.monotonic() + timeout
+    next_shot = 0.0
     while time.monotonic() < deadline:
         if await _logged_in(page):
             await asyncio.sleep(3)  # дать Telegram Web догрузиться
             return
+        # Сервер без экрана: присылаем снимок страницы с QR (код обновляется примерно раз в 30 с)
+        if on_qr and time.monotonic() >= next_shot:
+            await asyncio.sleep(4 if next_shot == 0 else 0)  # дождаться отрисовки QR
+            await on_qr(await page.screenshot())
+            next_shot = time.monotonic() + QR_RESEND_SEC
         await asyncio.sleep(1)
     raise WebLoginError("вход в Telegram Web не выполнен (QR-код не отсканирован)")
 
@@ -97,8 +106,10 @@ async def _grab_one(page, bot: str, app: str) -> str:
 
 async def grab_init_data(profile_dir: str, targets: dict[str, tuple[str, str]], headless: bool,
                          status: Status = lambda s: log.info(s),
-                         executable_path: str | None = None) -> dict[str, str | Exception]:
-    """targets: {market: (bot_username, app_short_name)} -> {market: initData или ошибка}."""
+                         executable_path: str | None = None,
+                         on_qr: Callable[[bytes], Awaitable[None]] | None = None) -> dict[str, str | Exception]:
+    """targets: {market: (bot_username, app_short_name)} -> {market: initData или ошибка}.
+    on_qr — если задан, снимки QR-кода отправляются туда (вход на сервере без экрана)."""
     from playwright.async_api import async_playwright
 
     results: dict[str, str | Exception] = {}
@@ -114,7 +125,8 @@ async def grab_init_data(profile_dir: str, targets: dict[str, tuple[str, str]], 
         try:
             page = ctx.pages[0] if ctx.pages else await ctx.new_page()
             await page.goto(WEB_URL)
-            await _wait_login(page, LOGIN_WAIT_HEADLESS if headless else LOGIN_WAIT_INTERACTIVE, status)
+            wait = LOGIN_WAIT_INTERACTIVE if (on_qr or not headless) else LOGIN_WAIT_HEADLESS
+            await _wait_login(page, wait, status, on_qr)
             for market, (bot, app) in targets.items():
                 status(f"Открываю {market}…")
                 try:
@@ -154,15 +166,40 @@ class WebAuthRefresher:
                 log.warning("Обновление входа через Telegram Web не удалось: %s", e)
                 if not self._failed_notified:
                     self._failed_notified = True
-                    await self.notify("🔑 Не удалось обновить вход через Telegram Web. "
-                                      "Перезапустите start.command — он попросит снова отсканировать QR.")
+                    await self.notify("🔑 Нужен вход в Telegram Web: отправьте боту /qr и отсканируйте "
+                                      "присланный QR-код вторым аккаунтом.")
                 return
-            for market, data in results.items():
-                if isinstance(data, str):
-                    await self.save(market, data)
-                else:
-                    log.warning("web login %s: %s", market, data)
+            await self._save_all(results)
             self._failed_notified = False
+
+    async def _save_all(self, results: dict[str, str | Exception]) -> int:
+        ok = 0
+        for market, data in results.items():
+            if isinstance(data, str):
+                await self.save(market, data)
+                ok += 1
+            else:
+                log.warning("web login %s: %s", market, data)
+        return ok
+
+    async def login_via_bot(self, send_photo: Callable[[bytes, str], Awaitable[None]]) -> str:
+        """Вход по QR через Telegram-бота: снимки QR приходят в чат, вы сканируете вторым аккаунтом."""
+        if self._lock.locked():
+            return "Вход уже выполняется — дождитесь QR-кода."
+        async with self._lock:
+            self._last = time.monotonic()
+
+            async def on_qr(png: bytes) -> None:
+                await send_photo(png, "📷 Отсканируйте вторым аккаунтом: Telegram → Настройки → Устройства → "
+                                      "Подключить устройство. Код обновляется — используйте последний снимок.")
+            try:
+                results = await grab_init_data(self.profile_dir, self.targets, headless=True, on_qr=on_qr)
+            except Exception as e:
+                return f"❌ Вход не выполнен: {e}"
+            ok = await self._save_all(results)
+            self._failed_notified = False
+            lines = [f"{'✅' if isinstance(v, str) else '❌'} {m}" for m, v in results.items()]
+            return f"Вход выполнен на {ok} из {len(results)} площадок:\n" + "\n".join(lines)
 
     async def run_periodic(self, every_hours: float = 6.0) -> None:
         while True:
