@@ -9,7 +9,7 @@ from aiogram import Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import Command, CommandObject, CommandStart
-from aiogram.types import (BufferedInputFile, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup,
+from aiogram.types import (BufferedInputFile, CallbackQuery, MenuButtonWebApp, WebAppInfo, InlineKeyboardButton, InlineKeyboardMarkup,
                            KeyboardButton, Message, ReplyKeyboardMarkup)
 
 from gift_bot.bot.texts import mk, ton
@@ -60,7 +60,19 @@ class ControlBot:
                 log.warning("Не удалось отправить фото %s: %s", uid, e)
 
     async def run(self) -> None:
+        if self.s.webapp_url:
+            try:  # кнопка «Панель» слева от поля ввода открывает мини-приложение
+                await self.bot.set_chat_menu_button(
+                    menu_button=MenuButtonWebApp(text="Панель", web_app=WebAppInfo(url=self.s.webapp_url)))
+            except Exception as e:
+                log.warning("Не удалось установить кнопку мини-приложения: %s", e)
         await self.dp.start_polling(self.bot, handle_signals=False)
+
+    def app_keyboard(self) -> InlineKeyboardMarkup | None:
+        if not self.s.webapp_url:
+            return None
+        return InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="🎛 Открыть панель", web_app=WebAppInfo(url=self.s.webapp_url))]])
 
     # --- тексты ---
     async def status_text(self) -> str:
@@ -150,7 +162,16 @@ class ControlBot:
         @r.message(CommandStart())
         async def start(m: Message):
             await m.answer("Бот торговли Telegram-подарками. Меню ниже.\n"
-                           "/status /mode /limits /report /stop /qr /auth", reply_markup=MENU)
+                           "/status /mode /limits /report /stop /qr /auth /app", reply_markup=MENU)
+            if self.s.webapp_url:
+                await m.answer("Все функции удобнее в панели:", reply_markup=self.app_keyboard())
+
+        @r.message(Command("app"))
+        async def app(m: Message):
+            if not self.s.webapp_url:
+                await m.answer("Мини-приложение работает на сервере: там его включает scripts/server_setup.sh.")
+                return
+            await m.answer("🎛 Панель управления:", reply_markup=self.app_keyboard())
 
         @r.message(Command("stop"))
         @r.message(F.text == BTN_STOP)

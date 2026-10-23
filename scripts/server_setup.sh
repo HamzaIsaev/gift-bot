@@ -28,15 +28,20 @@ if [ -z "$(get_env PANEL_PASSWORD)" ]; then
   read -r -s -p "Пароль: " v; echo
   set_env PANEL_PASSWORD "$v"
 fi
+IP=$(curl -fsS https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')
+if [ -z "$(get_env PANEL_DOMAIN)" ]; then
+  # Бесплатный адрес с https для мини-приложения: 1.2.3.4 -> 1-2-3-4.sslip.io
+  set_env PANEL_DOMAIN "$(echo "$IP" | tr . -).sslip.io"
+fi
 chmod 600 .env
 mkdir -p data
 
 say "Собираю и запускаю бота (первый раз 3–5 минут)..."
 docker compose up -d --build
 
-IP=$(curl -fsS https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')
 say "Готово! Бот работает 24/7 и сам перезапускается после сбоев и перезагрузки сервера."
-echo "Админ-панель: http://$IP:8080  (логин — любой, пароль — тот, что вы ввели)"
+echo "Мини-приложение: кнопка «Панель» в чате с ботом (или /app)"
+echo "Админ-панель в браузере: https://$(get_env PANEL_DOMAIN)  (логин — любой, пароль — тот, что вы ввели)"
 echo "Вход на площадки: напишите боту /qr и отсканируйте присланный QR вторым аккаунтом."
 echo
 echo "Полезные команды:"

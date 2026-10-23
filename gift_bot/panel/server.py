@@ -20,6 +20,7 @@ from gift_bot.config import Settings
 from gift_bot.markets.base import MarketAdapter
 from gift_bot.markets.manual_auth import ManualAuthStore
 from gift_bot.models import parse_dt
+from gift_bot.panel.webapp_auth import verify_init_data
 from gift_bot.reports.weekly import week_stats
 from gift_bot.risk.limits import LIMIT_NAMES, LIVE, OBSERVE, RiskManager
 from gift_bot.storage.db import Database
@@ -43,6 +44,7 @@ class Panel:
         self.app = web.Application(middlewares=[self._auth, self._csrf])
         self.app.add_routes([
             web.get("/", self.index),
+            web.get("/app", self.index),
             web.get("/api/overview", self.overview),
             web.get("/api/trades", self.trades),
             web.get("/api/signals", self.signals),
@@ -72,20 +74,35 @@ class Panel:
             await self._runner.cleanup()
 
     # --- защита ---
+    def _password_ok(self, request: web.Request) -> bool:
+        if not self.s.panel_password:
+            return True
+        header = request.headers.get("Authorization", "")
+        if not header.startswith("Basic "):
+            return False
+        try:
+            _, _, pwd = base64.b64decode(header[6:]).decode().partition(":")
+        except Exception:
+            return False
+        return hmac.compare_digest(pwd, self.s.panel_password.get_secret_value())
+
+    def _telegram_ok(self, request: web.Request) -> bool:
+        """Mini App: initData подписана токеном бота, пускаем только админов."""
+        init_data = request.headers.get("X-Tg-Init-Data", "")
+        if not init_data:
+            return False
+        uid = verify_init_data(init_data, self.s.bot_token.get_secret_value())
+        return uid is not None and uid in self.s.admin_ids
+
     @web.middleware
     async def _auth(self, request: web.Request, handler):
-        if self.s.panel_password:
-            expected = self.s.panel_password.get_secret_value()
-            ok = False
-            header = request.headers.get("Authorization", "")
-            if header.startswith("Basic "):
-                try:
-                    _, _, pwd = base64.b64decode(header[6:]).decode().partition(":")
-                    ok = hmac.compare_digest(pwd, expected)
-                except Exception:
-                    ok = False
-            if not ok:
-                return web.Response(status=401, headers={"WWW-Authenticate": 'Basic realm="Gift Bot"'})
+        # /app — страница мини-приложения: сама по себе ничего не раскрывает, данные идут через /api
+        if request.path == "/app":
+            return await handler(request)
+        if request.path.startswith("/api/") and self._telegram_ok(request):
+            return await handler(request)
+        if not self._password_ok(request):
+            return web.Response(status=401, headers={"WWW-Authenticate": 'Basic realm="Gift Bot"'})
         return await handler(request)
 
     @web.middleware

@@ -88,6 +88,12 @@ class Settings(BaseSettings):
     panel_host: str = Field("127.0.0.1", alias="PANEL_HOST")
     panel_port: int = Field(8080, alias="PANEL_PORT")
     panel_password: SecretStr | None = Field(None, alias="PANEL_PASSWORD")
+    # Домен с https для мини-приложения (на сервере выставляет scripts/server_setup.sh)
+    panel_domain: str | None = Field(None, alias="PANEL_DOMAIN")
+
+    @property
+    def webapp_url(self) -> str | None:
+        return f"https://{self.panel_domain}/app" if self.panel_domain else None
 
     # --- Еженедельный отчёт ---
     report_weekday: str = Field("mon", alias="REPORT_WEEKDAY")

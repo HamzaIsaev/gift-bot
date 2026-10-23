@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Gift Bot</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -50,6 +51,7 @@ header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-betw
 .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:14px}
 .grid2{display:grid;grid-template-columns:1.6fr 1fr;gap:14px;margin-bottom:14px}
 .grid2e{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid4>*,.grid2>*,.grid2e>*{min-width:0}  /* таблицы прокручиваются внутри карточки, а не растягивают экран */
 .card{background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:20px;padding:18px}
 .lbl{color:var(--muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em}
 .val{font-size:28px;font-weight:800;margin-top:6px;letter-spacing:-.02em}
@@ -64,6 +66,7 @@ td{padding:10px 6px;border-bottom:1px solid #151c29}
 .tag.buy{background:rgba(0,152,234,.15);color:#5cc8ff}.tag.arb{background:rgba(255,212,59,.13);color:var(--gold)}
 .tag.v{background:rgba(160,120,255,.15);color:#c3a8ff}
 .lim-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid #151c29}
+.lim-row>span:last-child,.lim-row>div>span:last-child{white-space:nowrap}
 .lim-row input{width:90px;background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:999px;padding:8px 12px;font:inherit;text-align:right}
 .lim-row input:focus{outline:none;border-color:var(--ton);box-shadow:0 0 0 3px rgba(0,152,234,.25)}
 .bar{height:6px;background:#1a2333;border-radius:3px;margin-top:6px;overflow:hidden}.bar i{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,var(--ton2),var(--ton3))}
@@ -71,7 +74,7 @@ td{padding:10px 6px;border-bottom:1px solid #151c29}
 .scroll{overflow-x:auto}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(120px);background:var(--card2);border:1px solid var(--line);
   padding:12px 20px;border-radius:999px;font-weight:600;transition:transform .3s;box-shadow:0 10px 30px rgba(0,0,0,.5);z-index:9}
-.toast.show{transform:translateX(-50%) translateY(0)}
+.toast{opacity:0}.toast.show{transform:translateX(-50%) translateY(0);opacity:1}
 .hidden{display:none}
 .auth-row{display:grid;grid-template-columns:110px 1fr auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid #151c29}
 .auth-row input{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:999px;padding:9px 14px;font:inherit}
@@ -79,7 +82,13 @@ td{padding:10px 6px;border-bottom:1px solid #151c29}
 code{background:#1a2333;padding:1px 6px;border-radius:6px;color:#9fd8ff}
 @media (max-width:600px){.auth-row{grid-template-columns:1fr}}
 @media (max-width:900px){.grid4{grid-template-columns:1fr 1fr}.grid2,.grid2e{grid-template-columns:1fr}}
-@media (max-width:480px){.grid4{grid-template-columns:1fr}.val{font-size:24px}.btn{padding:11px 18px}}
+@media (max-width:480px){
+  .wrap{padding:14px 12px 40px}
+  .grid4{grid-template-columns:1fr 1fr;gap:10px}.card{padding:14px;border-radius:16px}
+  .val{font-size:21px}.lbl{font-size:10px}.sub{font-size:11px}
+  .btn{padding:10px 16px}.seg button{padding:8px 13px}
+  .lim-row input{width:64px}
+}
 </style>
 </head>
 <body>
@@ -106,7 +115,7 @@ code{background:#1a2333;padding:1px 6px;border-radius:6px;color:#9fd8ff}
       <div class="card"><div class="lbl">Сделок за неделю</div><div class="val" id="trades">—</div><div class="sub" id="tradesSub"></div></div>
     </div>
     <div class="grid2">
-      <div class="card"><h3>Прибыль по дням, TON</h3><svg id="chart" viewBox="0 0 640 220" width="100%" height="220"></svg></div>
+      <div class="card"><h3>Прибыль по дням, TON</h3><svg id="chart" viewBox="0 0 640 220" width="100%" style="height:auto;display:block"></svg></div>
       <div class="card">
         <h3>Лимиты</h3>
         <div class="lim-row"><span>Макс. сумма сделки, TON</span><span><input id="lim-max_trade" inputmode="decimal"> <button class="btn sm" data-lim="max_trade">OK</button></span></div>
@@ -148,9 +157,17 @@ const time=s=>{if(!s)return"—";const d=new Date(s);return d.toLocaleString("ru
 const hours=(a,b)=>((new Date(b)-new Date(a))/36e5).toFixed(1)+" ч";
 let tab="overview", state=null;
 
+// --- Telegram Mini App ---
+const TG=window.Telegram&&Telegram.WebApp&&Telegram.WebApp.initData?Telegram.WebApp:null;
+if(TG){TG.ready();TG.expand();try{TG.setHeaderColor("#07090f");TG.setBackgroundColor("#07090f")}catch(e){}}
+const haptic=(k="light")=>{try{TG&&TG.HapticFeedback.impactOccurred(k)}catch(e){}};
+const ask=t=>new Promise(res=>TG?TG.showConfirm(t,ok=>res(!!ok)):res(confirm(t)));
+document.addEventListener("click",e=>{if(e.target.closest("button"))haptic()});
+
 function toast(t){const el=$("toast");el.textContent=t;el.classList.add("show");clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove("show"),2600)}
 async function api(path,body){
-  const r=await fetch(path,body===undefined?{}:{method:"POST",headers:{"Content-Type":"application/json","X-Panel":"1"},body:JSON.stringify(body)});
+  const h=TG?{"X-Tg-Init-Data":TG.initData}:{};
+  const r=await fetch(path,body===undefined?{headers:h}:{method:"POST",headers:{...h,"Content-Type":"application/json","X-Panel":"1"},body:JSON.stringify(body)});
   const j=await r.json().catch(()=>({}));
   if(!r.ok)throw new Error(j.error||("Ошибка "+r.status));
   return j;
@@ -231,11 +248,11 @@ async function refresh(){try{render(await api("/api/overview"));await loadTab()}
 $("tabs").onclick=e=>{const b=e.target.closest("button");if(!b)return;tab=b.dataset.tab;
   document.querySelectorAll("#tabs button").forEach(x=>x.classList.toggle("on",x===b));
   for(const t of ["overview","trades","signals"])$("tab-"+t).classList.toggle("hidden",t!==tab);loadTab()};
-$("stopBtn").onclick=async()=>{if(!confirm("Остановить все сделки?"))return;await api("/api/stop",{});toast("🛑 Остановлено");refresh()};
+$("stopBtn").onclick=async()=>{if(!await ask("Остановить все сделки?"))return;haptic("heavy");await api("/api/stop",{});toast("🛑 Остановлено");refresh()};
 $("resumeBtn").onclick=async()=>{await api("/api/resume",{});toast("▶ Работа возобновлена");refresh()};
 $("modeSeg").onclick=async e=>{const b=e.target.closest("button");if(!b||b.classList.contains("on"))return;
   const live=b.dataset.mode==="live";
-  if(live&&!confirm(`Включить БОЕВОЙ режим?\n\nБот будет покупать и продавать подарки за реальные TON.\nЛимиты: сделка до ${state.limits.max_trade} TON, дневной убыток до ${state.limits.max_daily_loss} TON, подарков до ${state.limits.max_positions}.`))return;
+  if(live&&!await ask(`Включить БОЕВОЙ режим?\n\nБот будет покупать и продавать подарки за реальные TON.\nЛимиты: сделка до ${state.limits.max_trade} TON, дневной убыток до ${state.limits.max_daily_loss} TON, подарков до ${state.limits.max_positions}.`))return;
   try{await api("/api/mode",{mode:b.dataset.mode,confirm:live});toast(live?"💎 Боевой режим включён":"🧪 Режим наблюдения");refresh()}catch(err){toast(err.message)}};
 document.querySelectorAll("[data-lim]").forEach(b=>b.onclick=async()=>{const k=b.dataset.lim;
   try{const r=await api("/api/limits",{name:k,value:$("lim-"+k).value});toast("✅ "+r.message);refresh()}catch(err){toast(err.message)}});

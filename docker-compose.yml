@@ -15,3 +15,21 @@ services:
     logging:
       driver: json-file
       options: { max-size: "20m", max-file: "5" }
+
+  # https для мини-приложения Telegram: Caddy сам получает бесплатный сертификат
+  # для PANEL_DOMAIN (по умолчанию <ip-с-дефисами>.sslip.io — покупать домен не нужно)
+  caddy:
+    image: caddy:2.10.2
+    restart: unless-stopped
+    env_file: .env
+    command: caddy reverse-proxy --from ${PANEL_DOMAIN} --to gift-bot:8080
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data
+    depends_on:
+      - gift-bot
+
+volumes:
+  caddy_data:
