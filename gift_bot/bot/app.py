@@ -184,7 +184,11 @@ class ControlBot:
                 where = await login.submit_password(text)
         except Exception as e:
             log.warning("Ошибка входа по телефону: %s", e)
-            await self.send_photo(await login.screenshot(), f"❌ Ошибка: {escape(str(e)[:150])}. Попробуйте /login заново.")
+            try:
+                await self.send_photo(await login.screenshot(), "❌ Снимок экрана в момент ошибки")
+            except Exception:
+                pass
+            await m.answer(f"❌ Ошибка: {escape(str(e)[:800])}\n\nПерешлите это сообщение разработчику и попробуйте /login заново.")
             await self.refresher.phone_login_end(login, grab=False)
             self.login_state = None
             return

@@ -177,9 +177,57 @@ async def current_page(page) -> str:
     return "unknown"
 
 
-async def _type_into(page, container: str, text: str) -> None:
-    """Ввести текст в поле страницы (поле может быть <input> или contenteditable)."""
-    field = page.locator(f"{container} input:visible, {container} [contenteditable=true]:visible").first
+# Поля ввода ищем по всей странице, от самых точных селекторов к общим:
+# вёрстка Telegram Web меняется, а держаться за один контейнер ненадёжно.
+FIELD_SELECTORS = {
+    "phone": [".input-field-phone [contenteditable]", ".input-field-phone input", "input[type=tel]",
+              "[inputmode=tel]", "input[name=phone]", ".page-sign .input-field-input",
+              ".page-sign [contenteditable]", ".page-sign input"],
+    "code": [".page-authCode input", "input[autocomplete=one-time-code]", "input[inputmode=numeric]",
+             "input[type=tel]", "input[type=number]", ".page-authCode [contenteditable]"],
+    "password": ["input[type=password]", ".page-password input"],
+}
+FIELD_WAIT = 12
+
+
+async def _find_field(page, kind: str, timeout: float = FIELD_WAIT):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        for sel in FIELD_SELECTORS[kind]:
+            loc = page.locator(sel)
+            try:
+                for i in range(await loc.count()):
+                    if await loc.nth(i).is_visible():
+                        return loc.nth(i)
+            except Exception:
+                continue
+        await asyncio.sleep(0.4)
+    return None
+
+
+async def debug_info(page) -> str:
+    """Что видно на странице — чтобы по сообщению об ошибке понять, где застряли."""
+    try:
+        info = await page.evaluate("""() => {
+          const vis = e => !!(e.offsetWidth || e.offsetHeight || e.getClientRects().length);
+          const pages = [...document.querySelectorAll('[class*="page-"]')].filter(vis)
+            .map(e => [...e.classList].filter(c => c.startsWith('page-')).join('.')).filter(Boolean);
+          const btns = [...document.querySelectorAll('button,[role=button],.btn-primary')].filter(vis)
+            .map(e => e.innerText.trim().slice(0, 40)).filter(Boolean);
+          const inputs = [...document.querySelectorAll('input,[contenteditable]')].filter(vis)
+            .map(e => e.tagName.toLowerCase() + (e.type ? '[' + e.type + ']' : '') + (e.className ? '.' + String(e.className).split(' ')[0] : ''));
+          return {pages: [...new Set(pages)].slice(0, 5), buttons: btns.slice(0, 6), inputs: inputs.slice(0, 6)};
+        }""")
+        return f"страницы: {info['pages']}; кнопки: {info['buttons']}; поля: {info['inputs']}"
+    except Exception as e:
+        return f"нет данных ({e})"
+
+
+async def _fill(page, kind: str, text: str) -> None:
+    """Ввести текст в поле (поле может быть <input> или contenteditable)."""
+    field = await _find_field(page, kind)
+    if field is None:
+        raise WebLoginError(f"не нашёл поле для ввода ({kind}). {await debug_info(page)}")
     await field.click()
     await page.keyboard.press("ControlOrMeta+A")
     await page.keyboard.press("Backspace")
@@ -187,15 +235,22 @@ async def _type_into(page, container: str, text: str) -> None:
 
 
 async def _click_text(page, container: str, pattern: re.Pattern) -> bool:
-    buttons = page.locator(f"{container} button, {container} .btn-primary")
-    for i in range(await buttons.count()):
-        b = buttons.nth(i)
+    """Нажать видимую кнопку с подходящим текстом (сначала в контейнере, потом на всей странице)."""
+    for scope in (container, ""):
+        prefix = f"{scope} " if scope else ""
+        buttons = page.locator(f"{prefix}button, {prefix}[role=button], {prefix}.btn-primary, {prefix}a")
         try:
-            if await b.is_visible() and pattern.search((await b.inner_text()) or ""):
-                await b.click()
-                return True
+            n = await buttons.count()
         except Exception:
             continue
+        for i in range(n):
+            b = buttons.nth(i)
+            try:
+                if await b.is_visible() and pattern.search((await b.inner_text()) or ""):
+                    await b.click()
+                    return True
+            except Exception:
+                continue
     return False
 
 
@@ -239,10 +294,13 @@ class PhoneLogin:
     async def submit_phone(self, phone: str) -> str:
         """→ code | password | done | phone (ошибка: номер не принят)."""
         page = self.page
-        if await current_page(page) == "qr":
+        # С экрана QR переходим на вход по номеру; пробуем несколько раз — кнопка появляется не сразу
+        for _ in range(3):
+            if await _find_field(page, "phone", timeout=2):
+                break
             await _click_text(page, PAGE_SELECTORS["qr"], PHONE_BTN_RE)
-            await _wait_change(page, "qr", 10)
-        await _type_into(page, PAGE_SELECTORS["phone"], phone)
+            await asyncio.sleep(1.5)
+        await _fill(page, "phone", phone)
         await asyncio.sleep(0.5)
         if not await _click_text(page, PAGE_SELECTORS["phone"], NEXT_BTN_RE):
             await page.keyboard.press("Enter")
@@ -250,12 +308,12 @@ class PhoneLogin:
 
     async def submit_code(self, code: str) -> str:
         """→ done | password | code (неверный/просроченный код) | signup."""
-        await _type_into(self.page, PAGE_SELECTORS["code"], code)
+        await _fill(self.page, "code", code)
         return await _wait_change(self.page, "code")
 
     async def submit_password(self, password: str) -> str:
         """→ done | password (неверный пароль)."""
-        await _type_into(self.page, PAGE_SELECTORS["password"], password)
+        await _fill(self.page, "password", password)
         await asyncio.sleep(0.3)
         if not await _click_text(self.page, PAGE_SELECTORS["password"], NEXT_BTN_RE):
             await self.page.keyboard.press("Enter")
