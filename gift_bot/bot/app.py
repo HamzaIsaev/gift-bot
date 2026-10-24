@@ -172,14 +172,17 @@ class ControlBot:
             pass
         await self.bot.send_chat_action(m.chat.id, "typing")
         try:
+            digits = "".join(ch for ch in text if ch.isdigit())
+            if step == "phone" and 4 <= len(digits) <= 6:
+                step = st["step"] = "code"            # это код, а не номер: Telegram уже ждёт его
             if step == "phone":
-                phone = "+" + "".join(ch for ch in text if ch.isdigit())
+                phone = "+" + digits
                 if len(phone) < 8:
                     await m.answer("Не похоже на номер. Пример: <code>+79991234567</code>")
                     return
                 where = await login.submit_phone(phone)
             elif step == "code":
-                where = await login.submit_code("".join(ch for ch in text if ch.isdigit()))
+                where = await login.submit_code(digits)
             else:
                 where = await login.submit_password(text)
         except Exception as e:
@@ -193,6 +196,8 @@ class ControlBot:
             self.login_state = None
             return
 
+        if where == "unknown" and step == "phone":
+            where = "code"                            # экран не распознан — после номера Telegram ждёт код
         if where == "done":
             await self._login_finish(m.chat.id)
         elif where in ("code", "password") and where != step:

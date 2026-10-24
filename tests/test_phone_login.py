@@ -91,3 +91,34 @@ async def test_without_password_and_session_kept(fake_tg, tmp_path):
         assert await again.start() == "done"
     finally:
         await again.close()
+
+
+# Новая вёрстка Web K: у страниц нет классов page-*, поле кода — обычный input[type=text],
+# аккаунт хранится в account1 вместо user_auth.
+FAKE_NEW = r"""<!doctype html><html><body><div id="app"></div><script>
+const app = document.getElementById('app');
+function phonePage() { app.innerHTML = '<div class="_auth_x1"><input type="tel" id="ph"><button id="n">Далее</button></div>';
+  n.onclick = () => codePage(); }
+function codePage() { app.innerHTML = '<div class="_auth_x2"><input type="text" class="_input_49ts9_11" id="c"></div>';
+  c.onkeydown = e => { if (e.key === 'Enter' && c.value === '12345') {
+    localStorage.setItem('account1', '{"userId":1}'); location.reload(); } }; }
+if (!localStorage.getItem('account1')) phonePage();
+else app.innerHTML = '<input type="text" placeholder="Поиск">';
+</script></body></html>"""
+
+
+async def test_new_layout(monkeypatch, tmp_path):
+    app = web.Application()
+    app.router.add_get("/k/", lambda r: web.Response(text=FAKE_NEW, content_type="text/html"))
+    server = TestServer(app)
+    await server.start_server()
+    monkeypatch.setattr(web_login, "WEB_URL", str(server.make_url("/k/")))
+    monkeypatch.setattr(web_login, "STEP_WAIT", 3)
+    login = PhoneLogin(str(tmp_path / "p"), executable_path=CHROME)
+    try:
+        await login.start()
+        assert await login.submit_phone("+79991234567") == "code"
+        assert await login.submit_code("12345") == "done"
+    finally:
+        await login.close()
+        await server.close()

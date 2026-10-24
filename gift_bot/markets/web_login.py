@@ -43,9 +43,26 @@ def init_data_from_url(url: str) -> str | None:
     return unquote(m.group(1)) if m else None
 
 
+# Признаки, что вход в Telegram Web уже выполнен. Новые версии Web K хранят аккаунты
+# в ключах account1, account2… вместо user_auth, а вместо страниц входа показывают
+# список чатов с поиском — проверяем и хранилище, и экран.
+LOGGED_IN_JS = """() => {
+  if (localStorage.getItem('user_auth')) return true;
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (/^account\\d+$/.test(k) && /userId|user_auth|"id"/.test(localStorage.getItem(k) || '')) return true;
+  }
+  const vis = e => !!(e.offsetWidth || e.offsetHeight || e.getClientRects().length);
+  if ([...document.querySelectorAll('[class*="page-sign"],[class*="page-auth"],[class*="page-password"]')].some(vis))
+    return false;
+  if ([...document.querySelectorAll('.chatlist,[data-peer-id]')].some(vis)) return true;
+  return [...document.querySelectorAll('input')].some(e => vis(e) && /search|поиск/i.test(e.placeholder || ''));
+}"""
+
+
 async def _logged_in(page) -> bool:
     try:
-        return bool(await page.evaluate("() => !!localStorage.getItem('user_auth')"))
+        return bool(await page.evaluate(LOGGED_IN_JS))
     except Exception:
         return False
 
@@ -184,7 +201,9 @@ FIELD_SELECTORS = {
               "[inputmode=tel]", "input[name=phone]", ".page-sign .input-field-input",
               ".page-sign [contenteditable]", ".page-sign input"],
     "code": [".page-authCode input", "input[autocomplete=one-time-code]", "input[inputmode=numeric]",
-             "input[type=tel]", "input[type=number]", ".page-authCode [contenteditable]"],
+             "input[type=tel]", "input[type=number]", ".page-authCode [contenteditable]",
+             # новая вёрстка: обычное текстовое поле без особых признаков
+             "input[type=text]:not([placeholder*=earch i]):not([placeholder*=оиск i])", "input:not([type])"],
     "password": ["input[type=password]", ".page-password input"],
 }
 FIELD_WAIT = 12
@@ -215,10 +234,14 @@ async def debug_info(page) -> str:
           const btns = [...document.querySelectorAll('button,[role=button],.btn-primary')].filter(vis)
             .map(e => e.innerText.trim().slice(0, 40)).filter(Boolean);
           const inputs = [...document.querySelectorAll('input,[contenteditable]')].filter(vis)
-            .map(e => e.tagName.toLowerCase() + (e.type ? '[' + e.type + ']' : '') + (e.className ? '.' + String(e.className).split(' ')[0] : ''));
-          return {pages: [...new Set(pages)].slice(0, 5), buttons: btns.slice(0, 6), inputs: inputs.slice(0, 6)};
+            .map(e => e.tagName.toLowerCase() + (e.type ? '[' + e.type + ']' : '') + (e.className ? '.' + String(e.className).split(' ')[0] : '')
+              + (e.placeholder ? ' «' + e.placeholder.slice(0, 30) + '»' : ''));
+          const keys = Object.keys(localStorage).filter(k => /auth|account|user/i.test(k)).slice(0, 8);
+          return {pages: [...new Set(pages)].slice(0, 5), buttons: btns.slice(0, 6), inputs: inputs.slice(0, 6),
+                  url: location.pathname + location.hash.slice(0, 20), keys};
         }""")
-        return f"страницы: {info['pages']}; кнопки: {info['buttons']}; поля: {info['inputs']}"
+        return (f"адрес: {info['url']}; страницы: {info['pages']}; кнопки: {info['buttons']}; "
+                f"поля: {info['inputs']}; хранилище: {info['keys']}")
     except Exception as e:
         return f"нет данных ({e})"
 
@@ -254,14 +277,27 @@ async def _click_text(page, container: str, pattern: re.Pattern) -> bool:
     return False
 
 
-async def _wait_change(page, before: str, timeout: float = STEP_WAIT) -> str:
+async def _where_after_phone(page) -> str:
+    """В новой вёрстке у страниц нет классов page-*: если номер отправлен, а поля номера
+    больше нет — значит, Telegram уже ждёт код (или облачный пароль)."""
+    now = await current_page(page)
+    if now != "unknown":
+        return now
+    if await _find_field(page, "password", timeout=0.1):
+        return "password"
+    if not await _find_field(page, "phone", timeout=0.1):
+        return "code"
+    return "unknown"
+
+
+async def _wait_change(page, before: str, timeout: float = STEP_WAIT, where=current_page) -> str:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        now = await current_page(page)
+        now = await where(page)
         if now not in (before, "unknown"):
             return now
         await asyncio.sleep(0.5)
-    return await current_page(page)
+    return await where(page)
 
 
 class PhoneLogin:
@@ -304,12 +340,15 @@ class PhoneLogin:
         await asyncio.sleep(0.5)
         if not await _click_text(page, PAGE_SELECTORS["phone"], NEXT_BTN_RE):
             await page.keyboard.press("Enter")
-        return await _wait_change(page, "phone")
+        return await _wait_change(page, "phone", where=_where_after_phone)
 
     async def submit_code(self, code: str) -> str:
         """→ done | password | code (неверный/просроченный код) | signup."""
         await _fill(self.page, "code", code)
-        return await _wait_change(self.page, "code")
+        await asyncio.sleep(0.5)
+        if await _find_field(self.page, "code", timeout=0.1):   # код не отправился сам — жмём Enter
+            await self.page.keyboard.press("Enter")
+        return await _wait_change(self.page, "code", where=_where_after_phone)
 
     async def submit_password(self, password: str) -> str:
         """→ done | password (неверный пароль)."""

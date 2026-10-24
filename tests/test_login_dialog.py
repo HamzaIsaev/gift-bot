@@ -76,3 +76,25 @@ async def test_login_dialog(env):
     assert bot.login_state is None and bot.refresher.ended == [True]
     assert any("3 из 3" in t for t in sent)
     assert not bot._awaiting_input(Msg("hello", sent))     # после входа обычные сообщения не перехватываются
+
+
+async def test_code_sent_at_phone_step(env):
+    """Telegram уже ждёт код, а бот ещё спрашивал номер: 5 цифр считаем кодом."""
+    e = await env()
+    bot = ControlBot(e.s, e.db, e.risk)
+    sent = []
+
+    async def send_message(chat_id, text, **kw):
+        sent.append(text)
+
+    async def noop(*a, **k):
+        pass
+
+    bot.bot = SimpleNamespace(send_message=send_message, send_chat_action=noop, session=None)
+    bot.send_photo = noop
+    bot.refresher = FakeRefresher()
+    login = bot.refresher.login
+    bot.login_state = {"login": login, "step": "phone", "chat": 1}
+    await bot._login_step(Msg("1 2 3 4 5", sent))
+    assert login.got == [("code", "12345")]
+    assert bot.login_state["step"] == "password"
