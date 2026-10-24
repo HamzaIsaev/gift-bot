@@ -39,7 +39,8 @@ class ControlBot:
         self.risk = risk
         self.store = store or ManualAuthStore(db)
         self.markets = markets or {}
-        self.refresher = None  # WebAuthRefresher — вход по QR через Telegram Web (/qr)
+        self.refresher = None  # WebAuthRefresher — вход через Telegram Web (/login, /qr)
+        self.login_state: dict | None = None  # идёт вход по телефону: {"login", "step", "chat"}
         self.bot = Bot(settings.bot_token.get_secret_value(),
                        default=DefaultBotProperties(parse_mode=ParseMode.HTML))
         self.dp = Dispatcher()
@@ -139,6 +140,70 @@ class ControlBot:
         ]
         return "\n".join(lines)
 
+    # --- вход по номеру телефона ---
+    PROMPTS = {
+        "phone": "📱 Отправьте номер телефона <b>второго</b> аккаунта, например <code>+79991234567</code>.\n"
+                 "Сообщение я сразу удалю. Отмена: /cancel",
+        "code": "🔢 Telegram прислал код на второй аккаунт. Отправьте его <b>с пробелами</b>, например "
+                "<code>1 2 3 4 5</code> — иначе Telegram аннулирует код. Отмена: /cancel",
+        "password": "🔐 На аккаунте стоит облачный пароль (2FA). Отправьте его — сообщение я сразу удалю. "
+                    "Отмена: /cancel",
+    }
+
+    def _awaiting_input(self, m: Message) -> bool:
+        return (self.login_state is not None and m.chat.id == self.login_state["chat"]
+                and bool(m.text) and not m.text.startswith("/"))
+
+    async def _login_finish(self, chat_id: int) -> None:
+        login = self.login_state["login"]
+        self.login_state = None
+        await self.bot.send_message(chat_id, "✅ Вход выполнен. Захожу на площадки…")
+        result = await self.refresher.phone_login_end(login, grab=True)
+        for market in self.markets.values():
+            market.reset_auth()
+        await self.bot.send_message(chat_id, result or "Готово.")
+
+    async def _login_step(self, m: Message) -> None:
+        st = self.login_state
+        login, step, text = st["login"], st["step"], m.text.strip()
+        try:
+            await m.delete()  # номер, код и пароль не оставляем в чате
+        except Exception:
+            pass
+        await self.bot.send_chat_action(m.chat.id, "typing")
+        try:
+            if step == "phone":
+                phone = "+" + "".join(ch for ch in text if ch.isdigit())
+                if len(phone) < 8:
+                    await m.answer("Не похоже на номер. Пример: <code>+79991234567</code>")
+                    return
+                where = await login.submit_phone(phone)
+            elif step == "code":
+                where = await login.submit_code("".join(ch for ch in text if ch.isdigit()))
+            else:
+                where = await login.submit_password(text)
+        except Exception as e:
+            log.warning("Ошибка входа по телефону: %s", e)
+            await self.send_photo(await login.screenshot(), f"❌ Ошибка: {escape(str(e)[:150])}. Попробуйте /login заново.")
+            await self.refresher.phone_login_end(login, grab=False)
+            self.login_state = None
+            return
+
+        if where == "done":
+            await self._login_finish(m.chat.id)
+        elif where in ("code", "password") and where != step:
+            st["step"] = where
+            await m.answer(self.PROMPTS[where])
+        elif where == "signup":
+            await m.answer("❌ На этот номер нет аккаунта Telegram. Проверьте номер: /login")
+            await self.refresher.phone_login_end(login, grab=False)
+            self.login_state = None
+        else:
+            hint = {"phone": "номер не принят — проверьте и отправьте ещё раз",
+                    "code": "код не подошёл или просрочен — отправьте ещё раз (с пробелами) или /cancel",
+                    "password": "пароль не подошёл — отправьте ещё раз или /cancel"}.get(step, "что-то пошло не так")
+            await self.send_photo(await login.screenshot(), f"⚠️ {hint}")
+
     async def _qr_login(self, chat_id: int) -> None:
         result = await self.refresher.login_via_bot(self.send_photo)
         for name, market in self.markets.items():
@@ -162,7 +227,7 @@ class ControlBot:
         @r.message(CommandStart())
         async def start(m: Message):
             await m.answer("Бот торговли Telegram-подарками. Меню ниже.\n"
-                           "/status /mode /limits /report /stop /qr /auth /app", reply_markup=MENU)
+                           "/status /mode /limits /report /stop /login /qr /app", reply_markup=MENU)
             if self.s.webapp_url:
                 await m.answer("Все функции удобнее в панели:", reply_markup=self.app_keyboard())
 
@@ -243,6 +308,45 @@ class ControlBot:
             elif args:
                 await m.answer("Не понял. Пример: <code>/limits max_trade 25</code>")
             await m.answer(self.limits_text())
+
+        @r.message(Command("login"))
+        async def login_cmd(m: Message):
+            if self.refresher is None:
+                await m.answer("Вход не нужен: включён автоматический вход через api_id.")
+                return
+            if self.login_state is not None:
+                await m.answer(self.PROMPTS[self.login_state["step"]])
+                return
+            await m.answer("⏳ Открываю Telegram Web…")
+            try:
+                res = await self.refresher.phone_login_begin()
+            except Exception as e:
+                await m.answer(f"❌ Не удалось открыть Telegram Web: {escape(str(e)[:150])}")
+                return
+            if res is None:
+                await m.answer("Сейчас уже идёт вход или обновление — попробуйте через минуту.")
+                return
+            login, where = res
+            if where == "done":
+                self.login_state = {"login": login, "step": "done", "chat": m.chat.id}
+                await self._login_finish(m.chat.id)
+                return
+            self.login_state = {"login": login, "step": "phone", "chat": m.chat.id}
+            await m.answer(self.PROMPTS["phone"])
+
+        @r.message(Command("cancel"))
+        async def cancel(m: Message):
+            if self.login_state is None:
+                await m.answer("Нечего отменять.")
+                return
+            login = self.login_state["login"]
+            self.login_state = None
+            await self.refresher.phone_login_end(login, grab=False)
+            await m.answer("Вход отменён.")
+
+        @r.message(self._awaiting_input)
+        async def login_input(m: Message):
+            await self._login_step(m)
 
         @r.message(Command("qr"))
         async def qr(m: Message):

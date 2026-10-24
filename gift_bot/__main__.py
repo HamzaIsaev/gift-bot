@@ -107,8 +107,8 @@ async def main() -> None:
     if tg is None:
         missing = [m for m, st in (await store.status()).items() if m in markets and not st["set"]]
         if missing:
-            start_msg += (f"\n🔑 Нужен вход на площадки ({', '.join(missing)}): отправьте /qr "
-                          f"и отсканируйте QR-код вторым аккаунтом")
+            start_msg += (f"\n🔑 Нужен вход на площадки ({', '.join(missing)}): отправьте /login "
+                          f"(по номеру телефона) или /qr (по QR-коду)")
     await bot.notify(start_msg)
     try:
         jobs = [bot.run(), trader.run()]

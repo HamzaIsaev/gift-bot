@@ -112,32 +112,167 @@ async def grab_init_data(profile_dir: str, targets: dict[str, tuple[str, str]], 
     on_qr — если задан, снимки QR-кода отправляются туда (вход на сервере без экрана)."""
     from playwright.async_api import async_playwright
 
-    results: dict[str, str | Exception] = {}
     async with async_playwright() as pw:
-        opts = dict(headless=headless, viewport={"width": 1200, "height": 850}, locale="ru-RU")
-        if executable_path:
-            ctx = await pw.chromium.launch_persistent_context(profile_dir, executable_path=executable_path, **opts)
-        else:
-            try:  # установленный Google Chrome (отдельный профиль — ваш обычный Chrome не затрагивается)
-                ctx = await pw.chromium.launch_persistent_context(profile_dir, channel="chrome", **opts)
-            except Exception:
-                ctx = await pw.chromium.launch_persistent_context(profile_dir, **opts)
+        ctx = await _launch(pw, profile_dir, headless, executable_path)
         try:
             page = ctx.pages[0] if ctx.pages else await ctx.new_page()
             await page.goto(WEB_URL)
             wait = LOGIN_WAIT_INTERACTIVE if (on_qr or not headless) else LOGIN_WAIT_HEADLESS
             await _wait_login(page, wait, status, on_qr)
-            for market, (bot, app) in targets.items():
-                status(f"Открываю {market}…")
-                try:
-                    results[market] = await _grab_one(page, bot, app)
-                    status(f"✅ {market}: данные входа получены")
-                except Exception as e:
-                    results[market] = e
-                    status(f"❌ {market}: {e}")
+            return await _grab_all(page, targets, status)
         finally:
             await ctx.close()
+
+
+async def _launch(pw, profile_dir: str, headless: bool, executable_path: str | None = None):
+    opts = dict(headless=headless, viewport={"width": 1200, "height": 850}, locale="ru-RU")
+    if executable_path:
+        return await pw.chromium.launch_persistent_context(profile_dir, executable_path=executable_path, **opts)
+    try:  # установленный Google Chrome (отдельный профиль — ваш обычный Chrome не затрагивается)
+        return await pw.chromium.launch_persistent_context(profile_dir, channel="chrome", **opts)
+    except Exception:
+        return await pw.chromium.launch_persistent_context(profile_dir, **opts)
+
+
+async def _grab_all(page, targets: dict[str, tuple[str, str]], status: Status) -> dict[str, str | Exception]:
+    results: dict[str, str | Exception] = {}
+    for market, (bot, app) in targets.items():
+        status(f"Открываю {market}…")
+        try:
+            results[market] = await _grab_one(page, bot, app)
+            status(f"✅ {market}: данные входа получены")
+        except Exception as e:
+            results[market] = e
+            status(f"❌ {market}: {e}")
     return results
+
+
+# ---------- вход по номеру телефона (пошагово, через бота) ----------
+
+# Страницы входа Telegram Web K
+PAGE_SELECTORS = {
+    "qr": ".page-signQR", "phone": ".page-sign", "code": ".page-authCode",
+    "password": ".page-password", "signup": ".page-signUp",
+}
+PHONE_BTN_RE = re.compile(r"(phone|телефон)", re.I)
+NEXT_BTN_RE = re.compile(r"^\s*(next|далее|продолжить|continue|войти|log ?in)\b", re.I)
+STEP_WAIT = 25
+
+
+async def _visible(page, selector: str) -> bool:
+    try:
+        loc = page.locator(selector)
+        return await loc.count() > 0 and await loc.first.is_visible()
+    except Exception:
+        return False
+
+
+async def current_page(page) -> str:
+    """Где сейчас Telegram Web: qr | phone | code | password | signup | done | unknown."""
+    if await _logged_in(page):
+        return "done"
+    for name in ("password", "code", "signup", "phone", "qr"):
+        if await _visible(page, PAGE_SELECTORS[name]):
+            return name
+    return "unknown"
+
+
+async def _type_into(page, container: str, text: str) -> None:
+    """Ввести текст в поле страницы (поле может быть <input> или contenteditable)."""
+    field = page.locator(f"{container} input:visible, {container} [contenteditable=true]:visible").first
+    await field.click()
+    await page.keyboard.press("ControlOrMeta+A")
+    await page.keyboard.press("Backspace")
+    await page.keyboard.type(text, delay=40)
+
+
+async def _click_text(page, container: str, pattern: re.Pattern) -> bool:
+    buttons = page.locator(f"{container} button, {container} .btn-primary")
+    for i in range(await buttons.count()):
+        b = buttons.nth(i)
+        try:
+            if await b.is_visible() and pattern.search((await b.inner_text()) or ""):
+                await b.click()
+                return True
+        except Exception:
+            continue
+    return False
+
+
+async def _wait_change(page, before: str, timeout: float = STEP_WAIT) -> str:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        now = await current_page(page)
+        if now not in (before, "unknown"):
+            return now
+        await asyncio.sleep(0.5)
+    return await current_page(page)
+
+
+class PhoneLogin:
+    """Пошаговый вход в Telegram Web: номер → код → (облачный пароль). Браузер живёт между шагами."""
+
+    def __init__(self, profile_dir: str, executable_path: str | None = None):
+        self.profile_dir = profile_dir
+        self.executable_path = executable_path
+        self._pw = None
+        self._ctx = None
+        self.page = None
+
+    async def start(self) -> str:
+        from playwright.async_api import async_playwright
+        self._pw = await async_playwright().start()
+        self._ctx = await _launch(self._pw, self.profile_dir, True, self.executable_path)
+        self.page = self._ctx.pages[0] if self._ctx.pages else await self._ctx.new_page()
+        await self.page.goto(WEB_URL)
+        deadline = time.monotonic() + STEP_WAIT
+        while time.monotonic() < deadline:
+            where = await current_page(self.page)
+            if where != "unknown":
+                return where
+            await asyncio.sleep(0.5)
+        return "unknown"
+
+    async def screenshot(self) -> bytes:
+        return await self.page.screenshot()
+
+    async def submit_phone(self, phone: str) -> str:
+        """→ code | password | done | phone (ошибка: номер не принят)."""
+        page = self.page
+        if await current_page(page) == "qr":
+            await _click_text(page, PAGE_SELECTORS["qr"], PHONE_BTN_RE)
+            await _wait_change(page, "qr", 10)
+        await _type_into(page, PAGE_SELECTORS["phone"], phone)
+        await asyncio.sleep(0.5)
+        if not await _click_text(page, PAGE_SELECTORS["phone"], NEXT_BTN_RE):
+            await page.keyboard.press("Enter")
+        return await _wait_change(page, "phone")
+
+    async def submit_code(self, code: str) -> str:
+        """→ done | password | code (неверный/просроченный код) | signup."""
+        await _type_into(self.page, PAGE_SELECTORS["code"], code)
+        return await _wait_change(self.page, "code")
+
+    async def submit_password(self, password: str) -> str:
+        """→ done | password (неверный пароль)."""
+        await _type_into(self.page, PAGE_SELECTORS["password"], password)
+        await asyncio.sleep(0.3)
+        if not await _click_text(self.page, PAGE_SELECTORS["password"], NEXT_BTN_RE):
+            await self.page.keyboard.press("Enter")
+        return await _wait_change(self.page, "password")
+
+    async def grab(self, targets: dict[str, tuple[str, str]]) -> dict[str, str | Exception]:
+        await asyncio.sleep(3)  # дать Telegram Web догрузиться после входа
+        return await _grab_all(self.page, targets, lambda s: log.info(s))
+
+    async def close(self) -> None:
+        try:
+            if self._ctx:
+                await self._ctx.close()
+        finally:
+            if self._pw:
+                await self._pw.stop()
+            self._ctx = self._pw = self.page = None
 
 
 class WebAuthRefresher:
@@ -166,8 +301,8 @@ class WebAuthRefresher:
                 log.warning("Обновление входа через Telegram Web не удалось: %s", e)
                 if not self._failed_notified:
                     self._failed_notified = True
-                    await self.notify("🔑 Нужен вход в Telegram Web: отправьте боту /qr и отсканируйте "
-                                      "присланный QR-код вторым аккаунтом.")
+                    await self.notify("🔑 Нужен вход в Telegram Web: отправьте боту /login (по номеру телефона) "
+                                      "или /qr (по QR-коду).")
                 return
             await self._save_all(results)
             self._failed_notified = False
@@ -200,6 +335,52 @@ class WebAuthRefresher:
             self._failed_notified = False
             lines = [f"{'✅' if isinstance(v, str) else '❌'} {m}" for m, v in results.items()]
             return f"Вход выполнен на {ok} из {len(results)} площадок:\n" + "\n".join(lines)
+
+    # --- вход по номеру телефона: сессия живёт между сообщениями бота ---
+    PHONE_LOGIN_TIMEOUT = 10 * 60
+
+    async def phone_login_begin(self) -> tuple[PhoneLogin, str] | None:
+        """Открыть Telegram Web для входа по номеру. None — уже идёт другой вход."""
+        if self._lock.locked():
+            return None
+        await self._lock.acquire()
+        login = PhoneLogin(self.profile_dir)
+        try:
+            where = await login.start()
+        except Exception:
+            await login.close()
+            self._lock.release()
+            raise
+        self._phone_login = login
+        # страховка: если вход бросили на полпути — закрыть браузер и освободить профиль
+        self._phone_watchdog = asyncio.create_task(self._phone_timeout(login))
+        return login, where
+
+    async def _phone_timeout(self, login: PhoneLogin) -> None:
+        await asyncio.sleep(self.PHONE_LOGIN_TIMEOUT)
+        if getattr(self, "_phone_login", None) is login:
+            await self.phone_login_end(login, grab=False)
+
+    async def phone_login_end(self, login: PhoneLogin, grab: bool) -> str | None:
+        """Завершить вход: при grab=True собрать данные площадок и сохранить."""
+        if getattr(self, "_phone_login", None) is not login:
+            return None
+        self._phone_login = None
+        watchdog = getattr(self, "_phone_watchdog", None)
+        if watchdog and watchdog is not asyncio.current_task():
+            watchdog.cancel()
+        try:
+            if not grab:
+                return None
+            results = await login.grab(self.targets)
+            ok = await self._save_all(results)
+            self._failed_notified = False
+            self._last = time.monotonic()
+            lines = [f"{'✅' if isinstance(v, str) else '❌'} {m}" for m, v in results.items()]
+            return f"Вход выполнен на {ok} из {len(results)} площадок:\n" + "\n".join(lines)
+        finally:
+            await login.close()
+            self._lock.release()
 
     async def run_periodic(self, every_hours: float = 6.0) -> None:
         while True:
