@@ -24,6 +24,7 @@ from gift_bot.panel.server import Panel
 from gift_bot.pricing.valuation import Pricer
 from gift_bot.reports.weekly import build_report
 from gift_bot.risk.limits import LIVE, RiskManager
+from gift_bot.settings_registry import SettingsService
 from gift_bot.storage.db import Database
 
 log = logging.getLogger("gift_bot")
@@ -64,6 +65,8 @@ async def main() -> None:
     await db.connect()
     risk = RiskManager(db, s)
     await risk.load()
+    tuning = SettingsService(s, db, risk)
+    await tuning.load()  # изменения настроек, сделанные в админ-панели
     tg = None
     if s.auto_auth:
         tg = TelegramAuth(s.tg_api_id, s.tg_api_hash.get_secret_value(), s.tg_session_string.get_secret_value())
@@ -92,7 +95,7 @@ async def main() -> None:
     scheduler.add_job(weekly, "cron", day_of_week=s.report_weekday, hour=s.report_hour, minute=0)
     scheduler.start()
 
-    panel = Panel(s, db, risk, bot.notify, store, markets) if s.panel_enabled else None
+    panel = Panel(s, db, risk, bot.notify, store, markets, tuning) if s.panel_enabled else None
     if panel:
         await panel.start()
 

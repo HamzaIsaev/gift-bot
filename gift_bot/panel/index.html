@@ -47,7 +47,8 @@ header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-betw
   padding:9px 18px;border-radius:999px;cursor:pointer;transition:all .2s}
 .seg button.on{color:#fff;background:linear-gradient(135deg,var(--ton2),var(--ton3));box-shadow:0 4px 16px rgba(0,152,234,.45)}
 
-.tabs{margin-bottom:18px}
+.tabs{margin-bottom:18px;max-width:100%;overflow-x:auto;scrollbar-width:none}.tabs::-webkit-scrollbar{display:none}
+.seg button{white-space:nowrap}
 .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:14px}
 .grid2{display:grid;grid-template-columns:1.6fr 1fr;gap:14px;margin-bottom:14px}
 .grid2e{display:grid;grid-template-columns:1fr 1fr;gap:14px}
@@ -76,12 +77,61 @@ td{padding:10px 6px;border-bottom:1px solid #151c29}
   padding:12px 20px;border-radius:999px;font-weight:600;transition:transform .3s;box-shadow:0 10px 30px rgba(0,0,0,.5);z-index:9}
 .toast{opacity:0}.toast.show{transform:translateX(-50%) translateY(0);opacity:1}
 .hidden{display:none}
+/* подсказки «?» */
+.q{appearance:none;border:0;cursor:pointer;width:18px;height:18px;border-radius:50%;margin-left:6px;vertical-align:1px;
+  background:#1c2636;color:#8fb4d9;font:700 11px/18px Inter,sans-serif;padding:0;text-transform:none;letter-spacing:0}
+.q:hover{background:var(--ton);color:#fff}
+/* модальное окно (снизу на телефоне) */
+.overlay{position:fixed;inset:0;background:rgba(3,5,10,.72);backdrop-filter:blur(6px);z-index:20;display:flex;
+  align-items:center;justify-content:center;padding:16px;opacity:0;pointer-events:none;transition:opacity .2s}
+.overlay.show{opacity:1;pointer-events:auto}
+.sheet{background:linear-gradient(180deg,#162036,#0f1420);border:1px solid var(--line);border-radius:22px;
+  width:min(620px,100%);max-height:86vh;overflow:auto;padding:20px;box-shadow:0 30px 80px rgba(0,0,0,.6);
+  transform:translateY(24px);transition:transform .25s}
+.overlay.show .sheet{transform:none}
+.sheet h2{margin:0 0 4px;font-size:19px}.sheet .x{float:right}
+.sec{margin-top:16px;padding-top:14px;border-top:1px solid #1b2436}
+.sec h4{margin:0 0 8px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.kv{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:14px}.kv span:first-child{color:var(--muted)}
+.factor{display:grid;grid-template-columns:110px 1fr 40px;gap:10px;align-items:center;font-size:13px;padding:3px 0}
+.verdict{margin-top:16px;padding:14px;border-radius:16px;font-weight:700;font-size:15px}
+.verdict.ok{background:rgba(62,224,143,.12);color:var(--green)}.verdict.no{background:rgba(255,90,95,.1);color:#ff8a8f}
+tr.click{cursor:pointer}tr.click:hover td{background:rgba(0,152,234,.06)}
+/* настройки */
+.presets{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px}
+.preset{cursor:pointer;text-align:left;border:1px solid var(--line);transition:border-color .2s,transform .12s;color:var(--text);font:inherit}
+.preset:hover{transform:translateY(-2px);border-color:var(--ton)}
+.preset.on{border-color:var(--ton);box-shadow:0 0 0 1px var(--ton),0 10px 30px rgba(0,152,234,.25)}
+.preset b{font-size:16px}
+.sgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.sgrid>*{min-width:0}
+.setting{padding:14px 0;border-bottom:1px solid #151c29}.setting:last-child{border:0;padding-bottom:0}
+.srow{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.stitle{font-weight:700;font-size:14px}
+.shelp{color:var(--muted);font-size:12.5px;margin:4px 0 10px;line-height:1.45}
+.sval{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.sval input[type=number]{width:84px;background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:999px;
+  padding:7px 10px;font:inherit;font-weight:700;text-align:right}
+.sval input:focus{outline:none;border-color:var(--ton);box-shadow:0 0 0 3px rgba(0,152,234,.25)}
+.unit{color:var(--muted);font-size:12px;min-width:20px}
+input[type=range]{width:100%;accent-color:var(--ton);height:28px}
+.changed{font-size:10px;font-weight:800;color:var(--gold);background:rgba(255,212,59,.12);padding:2px 7px;border-radius:999px;margin-left:6px}
+.reset{appearance:none;border:0;background:none;color:#8fb4d9;cursor:pointer;font:600 12px Inter,sans-serif;padding:0}
+.reset:hover{color:var(--ton2)}
+.switch{position:relative;width:52px;height:30px;flex:none;cursor:pointer}
+.switch input{opacity:0;width:0;height:0}
+.switch i{position:absolute;inset:0;border-radius:999px;background:#253049;transition:.2s}
+.switch i:before{content:"";position:absolute;width:24px;height:24px;left:3px;top:3px;border-radius:50%;background:#fff;transition:.2s}
+.switch input:checked+i{background:linear-gradient(135deg,var(--ton2),var(--ton3))}
+.switch input:checked+i:before{transform:translateX(22px)}
+.limbar{display:flex;justify-content:space-between;font-size:13px;margin-top:10px}
 .auth-row{display:grid;grid-template-columns:110px 1fr auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid #151c29}
 .auth-row input{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:999px;padding:9px 14px;font:inherit}
 .auth-row input:focus{outline:none;border-color:var(--ton);box-shadow:0 0 0 3px rgba(0,152,234,.25)}
 code{background:#1a2333;padding:1px 6px;border-radius:6px;color:#9fd8ff}
 @media (max-width:600px){.auth-row{grid-template-columns:1fr}}
-@media (max-width:900px){.grid4{grid-template-columns:1fr 1fr}.grid2,.grid2e{grid-template-columns:1fr}}
+@media (max-width:900px){.grid4{grid-template-columns:1fr 1fr}.grid2,.grid2e,.sgrid{grid-template-columns:1fr}}
+@media (max-width:600px){.presets{grid-template-columns:1fr}.overlay{align-items:flex-end;padding:0}
+  .sheet{border-radius:22px 22px 0 0;max-height:90vh}}
 @media (max-width:480px){
   .wrap{padding:14px 12px 40px}
   .grid4{grid-template-columns:1fr 1fr;gap:10px}.card{padding:14px;border-radius:16px}
@@ -105,27 +155,28 @@ code{background:#1a2333;padding:1px 6px;border-radius:6px;color:#9fd8ff}
     </div>
   </header>
 
-  <div class="seg tabs" id="tabs"><button data-tab="overview" class="on">Обзор</button><button data-tab="trades">Сделки</button><button data-tab="signals">Сигналы</button></div>
+  <div class="seg tabs" id="tabs"><button data-tab="overview" class="on">Обзор</button><button data-tab="trades">Сделки</button><button data-tab="signals">Сигналы</button><button data-tab="settings">⚙️ Настройки</button></div>
 
   <section id="tab-overview">
     <div class="grid4">
-      <div class="card"><div class="lbl" id="balLbl">Баланс</div><div class="val" id="balance">—</div><div class="sub" id="free"></div></div>
-      <div class="card"><div class="lbl">Прибыль сегодня</div><div class="val" id="today">—</div><div class="sub" id="todaySub"></div></div>
-      <div class="card"><div class="lbl">Прибыль за неделю</div><div class="val" id="week">—</div><div class="sub" id="weekSub"></div></div>
-      <div class="card"><div class="lbl">Сделок за неделю</div><div class="val" id="trades">—</div><div class="sub" id="tradesSub"></div></div>
+      <div class="card"><div class="lbl"><span id="balLbl">Баланс</span><button class="q" data-help="balance">?</button></div><div class="val" id="balance">—</div><div class="sub" id="free"></div></div>
+      <div class="card"><div class="lbl">Прибыль сегодня<button class="q" data-help="today">?</button></div><div class="val" id="today">—</div><div class="sub" id="todaySub"></div></div>
+      <div class="card"><div class="lbl">Прибыль за неделю<button class="q" data-help="week">?</button></div><div class="val" id="week">—</div><div class="sub" id="weekSub"></div></div>
+      <div class="card"><div class="lbl">Сделок за неделю<button class="q" data-help="trades">?</button></div><div class="val" id="trades">—</div><div class="sub" id="tradesSub"></div></div>
     </div>
     <div class="grid2">
       <div class="card"><h3>Прибыль по дням, TON</h3><svg id="chart" viewBox="0 0 640 220" width="100%" style="height:auto;display:block"></svg></div>
       <div class="card">
-        <h3>Лимиты</h3>
-        <div class="lim-row"><span>Макс. сумма сделки, TON</span><span><input id="lim-max_trade" inputmode="decimal"> <button class="btn sm" data-lim="max_trade">OK</button></span></div>
-        <div class="lim-row" style="display:block"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><span>Дневной убыток, TON</span><span><input id="lim-max_daily_loss" inputmode="decimal"> <button class="btn sm" data-lim="max_daily_loss">OK</button></span></div><div class="bar"><i id="lossBar" style="width:0"></i></div></div>
-        <div class="lim-row" style="display:block"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><span>Подарков одновременно</span><span><input id="lim-max_positions" inputmode="numeric"> <button class="btn sm" data-lim="max_positions">OK</button></span></div><div class="bar"><i id="posBar" style="width:0"></i></div></div>
-        <div class="lim-row" style="border:0"><span>Мин. прибыль</span><b id="minProfit">—</b></div>
+        <h3>Лимиты безопасности<button class="q" data-help="limits">?</button></h3>
+        <div class="limbar"><span>Сумма одной сделки</span><b id="limTrade">—</b></div>
+        <div class="limbar"><span>Убыток сегодня / лимит</span><b id="limLoss">—</b></div><div class="bar"><i id="lossBar" style="width:0"></i></div>
+        <div class="limbar"><span>Подарков на балансе</span><b id="limPos">—</b></div><div class="bar"><i id="posBar" style="width:0"></i></div>
+        <div class="limbar"><span>Мин. прибыль сделки</span><b id="minProfit">—</b></div>
+        <button class="btn ghost sm" style="margin-top:14px;width:100%;justify-content:center" id="toSettings">⚙️ Изменить настройки</button>
       </div>
     </div>
     <div class="grid2e">
-      <div class="card"><h3>Открытые позиции</h3><div class="scroll"><table><thead><tr><th>Подарок</th><th>Площадка</th><th>Куплено</th><th>Выставлено</th><th>Мин.</th></tr></thead><tbody id="positions"></tbody></table></div></div>
+      <div class="card"><h3>Открытые позиции<button class="q" data-help="positions">?</button></h3><div class="scroll"><table><thead><tr><th>Подарок</th><th>Площадка</th><th>Куплено</th><th>Выставлено</th><th>Мин.</th></tr></thead><tbody id="positions"></tbody></table></div></div>
       <div class="card"><h3>Лучшие модели недели</h3><div class="scroll"><table><thead><tr><th>Модель</th><th style="text-align:right">Прибыль, TON</th></tr></thead><tbody id="models"></tbody></table></div></div>
     </div>
     <div class="card" id="authCard" style="margin-top:14px">
@@ -140,11 +191,19 @@ code{background:#1a2333;padding:1px 6px;border-radius:6px;color:#9fd8ff}
     <div class="card"><h3>Закрытые сделки</h3><div class="scroll"><table><thead><tr><th>Закрыта</th><th>Подарок</th><th>Площадка</th><th>Затраты</th><th>Продано</th><th>На руки</th><th>Прибыль</th><th>Время</th></tr></thead><tbody id="tradesTable"></tbody></table></div></div>
   </section>
 
+  <section id="tab-settings" class="hidden">
+    <div class="sub" style="margin:0 0 10px">Выберите готовый профиль или настройте каждый параметр. Изменения применяются сразу и видны во всех открытых панелях.</div>
+    <div class="presets" id="presets"></div>
+    <div class="sgrid" id="settingsGroups"></div>
+    <div style="text-align:center;margin-top:18px"><button class="btn ghost sm" id="resetAll">↺ Вернуть всё по умолчанию</button></div>
+  </section>
+
   <section id="tab-signals" class="hidden">
-    <div class="card"><h3>Сигналы</h3><div class="scroll"><table><thead><tr><th>Время</th><th>Подарок</th><th>Площадка</th><th>Цена</th><th>Fair</th><th>Score</th><th>Продаж/7д</th><th>EV</th><th>Порог</th><th>Решение / причина</th></tr></thead><tbody id="signalsTable"></tbody></table></div></div>
+    <div class="card"><h3>Сигналы</h3><div class="sub" style="margin:-6px 0 10px">Нажмите на строку — бот объяснит, почему купил или пропустил.</div><div class="scroll"><table><thead><tr><th>Время</th><th>Подарок</th><th>Площадка</th><th>Цена</th><th>Fair<button class="q" data-help="fair">?</button></th><th>Score<button class="q" data-help="score">?</button></th><th>Продаж/7д<button class="q" data-help="sales7">?</button></th><th>EV<button class="q" data-help="ev">?</button></th><th>Порог</th><th>Решение / причина</th></tr></thead><tbody id="signalsTable"></tbody></table></div></div>
   </section>
 </div>
 <div class="toast" id="toast"></div>
+<div class="overlay" id="overlay"><div class="sheet" id="sheet"></div></div>
 
 <script>
 const MK={portals:"Portals",tonnel:"Tonnel",mrkt:"MRKT"};
@@ -215,8 +274,10 @@ function render(o){
   $("tradesSub").textContent=`${o.week.wins} в плюс · ${o.week.losses} в минус`+(o.week.avg_hold_h!=null?` · ${o.week.avg_hold_h.toFixed(1)} ч в среднем`:"");
   chart(o.daily);
 
-  for(const k of ["max_trade","max_daily_loss","max_positions"]){const el=$("lim-"+k);if(document.activeElement!==el)el.value=o.limits[k]}
   const loss=Math.max(0,-o.pnl_today); $("lossBar").style.width=Math.min(100,loss/o.limits.max_daily_loss*100)+"%";
+  $("limTrade").textContent="до "+o.limits.max_trade+" TON";
+  $("limLoss").textContent=n2(loss)+" / "+o.limits.max_daily_loss+" TON";
+  $("limPos").textContent=o.positions.length+" / "+o.limits.max_positions;
   $("posBar").style.width=Math.min(100,o.positions.length/o.limits.max_positions*100)+"%";
   $("minProfit").textContent=o.min_profit_pct+"%"+(o.adaptive?" · адаптивно":"");
 
@@ -236,11 +297,14 @@ async function loadTab(){
   if(tab==="trades"){
     const rows=await api("/api/trades");
     $("tradesTable").innerHTML=rows.length?rows.map(r=>`<tr><td>${time(r.closed_at)}</td><td>${esc(r.title)}</td><td>${MK[r.market]||esc(r.market)}</td><td>${n2(r.buy_cost)}</td><td>${n2(r.sold_price)}</td><td>${n2(r.net_proceeds)}</td><td class="${cls(r.pnl)}"><b>${sign(r.pnl)}</b></td><td>${hours(r.opened_at,r.closed_at)}</td></tr>`).join(""):`<tr><td colspan="8" class="empty">Сделок пока нет</td></tr>`;
+  }else if(tab==="settings"){
+    if(!settingsBusy())renderSettings(await api("/api/settings"));
   }else if(tab==="signals"){
     const rows=await api("/api/signals");
     const dec=r=>r.decision==="buy"?'<span class="tag buy">покупка</span>':r.decision==="signal"?'<span class="tag arb">арбитраж → '+(MK[r.target_market]||"")+'</span>':`<span class="tag" title="${esc(r.reason)}">пропуск</span> <span class="sub">${esc((r.reason||"").replace(/^limit:/,"лимит "))}</span>`;
     const ev=r=>r.ev_pct!=null?r.ev_pct:r.profit_pct;
-    $("signalsTable").innerHTML=rows.length?rows.map(r=>`<tr><td>${time(r.ts)}</td><td>${esc(r.title)}</td><td>${MK[r.market]||esc(r.market)}</td><td>${n2(r.price)}</td><td>${n2(r.fair??r.market_price)}</td><td>${r.score!=null?Math.round(r.score):"—"}</td><td>${r.sales_7d??"—"}</td><td class="${cls(ev(r))}">${sign(ev(r))}%</td><td>${n2(r.required_pct)}%</td><td>${dec(r)}</td></tr>`).join(""):`<tr><td colspan="10" class="empty">Сигналов пока нет</td></tr>`;
+    sigRows=rows;
+    $("signalsTable").innerHTML=rows.length?rows.map((r,i)=>`<tr class="click" data-sig="${i}"><td>${time(r.ts)}</td><td>${esc(r.title)}</td><td>${MK[r.market]||esc(r.market)}</td><td>${n2(r.price)}</td><td>${n2(r.fair??r.market_price)}</td><td>${r.score!=null?Math.round(r.score):"—"}</td><td>${r.sales_7d??"—"}</td><td class="${cls(ev(r))}">${sign(ev(r))}%</td><td>${n2(r.required_pct)}%</td><td>${dec(r)}</td></tr>`).join(""):`<tr><td colspan="10" class="empty">Сигналов пока нет</td></tr>`;
   }
 }
 
@@ -272,15 +336,115 @@ document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh()}
 
 $("tabs").onclick=e=>{const b=e.target.closest("button");if(!b)return;tab=b.dataset.tab;
   document.querySelectorAll("#tabs button").forEach(x=>x.classList.toggle("on",x===b));
-  for(const t of ["overview","trades","signals"])$("tab-"+t).classList.toggle("hidden",t!==tab);loadTab()};
+  for(const t of ["overview","trades","signals","settings"])$("tab-"+t).classList.toggle("hidden",t!==tab);loadTab()};
 $("stopBtn").onclick=async()=>{if(!await ask("Остановить все сделки?"))return;haptic("heavy");await api("/api/stop",{});toast("🛑 Остановлено");refresh()};
 $("resumeBtn").onclick=async()=>{await api("/api/resume",{});toast("▶ Работа возобновлена");refresh()};
 $("modeSeg").onclick=async e=>{const b=e.target.closest("button");if(!b||b.classList.contains("on"))return;
   const live=b.dataset.mode==="live";
   if(live&&!await ask(`Включить БОЕВОЙ режим?\n\nБот будет покупать и продавать подарки за реальные TON.\nЛимиты: сделка до ${state.limits.max_trade} TON, дневной убыток до ${state.limits.max_daily_loss} TON, подарков до ${state.limits.max_positions}.`))return;
   try{await api("/api/mode",{mode:b.dataset.mode,confirm:live});toast(live?"💎 Боевой режим включён":"🧪 Режим наблюдения");refresh()}catch(err){toast(err.message)}};
-document.querySelectorAll("[data-lim]").forEach(b=>b.onclick=async()=>{const k=b.dataset.lim;
-  try{const r=await api("/api/limits",{name:k,value:$("lim-"+k).value});toast("✅ "+r.message);refresh()}catch(err){toast(err.message)}});
+
+// ---------- подсказки ----------
+const HELP={
+  balance:["Баланс","В режиме наблюдения — виртуальные 100 TON плюс прибыль виртуальных сделок. В боевом — сумма балансов на площадках плюс стоимость купленных подарков. «Свободно» — то, что ещё не вложено."],
+  today:["Прибыль сегодня","Чистая прибыль по проданным сегодня подаркам: цена продажи за вычетом комиссий минус цена покупки. Непроданные не учитываются."],
+  week:["Прибыль за неделю","Чистая прибыль за последние 7 дней и разница с предыдущей неделей."],
+  trades:["Сделки за неделю","Сколько подарков куплено и продано за 7 дней, сколько в плюс и минус, и сколько в среднем от покупки до продажи."],
+  limits:["Лимиты безопасности","Жёсткие ограничения: бот не купит дороже лимита, не держит больше заданного числа подарков и останавливает покупки до завтра при дневном убытке. Менять — во вкладке «Настройки»."],
+  positions:["Открытые позиции","Купленные и ещё не проданные подарки. «Выставлено» — текущая цена продажи, «Мин.» — ниже неё бот не опустится (безубыточность)."],
+  fair:["Fair — справедливая цена","Сколько подарок реально стоит по оценке бота: смесь медианы недавних продаж (свежие весят больше, выбросы отброшены) и цен 2–3-го лота в стакане. Если продаж мало или цена падает — с дисконтом."],
+  score:["Score — оценка подарка","0–100: редкость модели, фона и символа, тираж коллекции, сколько улучшено, возраст коллекции и стабильность цены. Чем выше — тем «фундаментальнее» подарок."],
+  sales7:["Продаж за 7 дней","Сколько раз эту модель купили за неделю на всех площадках. Показатель ликвидности: мало продаж — подарок трудно продать."],
+  ev:["EV — ожидаемая прибыль","(цена продажи − цена покупки) × вероятность продать − риск колебаний цены, в % от цены покупки. Бот покупает, только если EV не ниже порога."],
+};
+const overlay=$("overlay"), sheet=$("sheet");
+function openSheet(html){sheet.innerHTML=`<button class="btn ghost sm x" onclick="closeSheet()">✕</button>`+html;overlay.classList.add("show");
+  if(TG)try{TG.BackButton.show();TG.BackButton.onClick(closeSheet)}catch(e){}}
+function closeSheet(){overlay.classList.remove("show");if(TG)try{TG.BackButton.hide()}catch(e){}}
+overlay.onclick=e=>{if(e.target===overlay)closeSheet()};
+document.addEventListener("click",e=>{const q=e.target.closest(".q");if(!q)return;e.stopPropagation();
+  const [t,txt]=HELP[q.dataset.help]||["",""];openSheet(`<h2>${t}</h2><div class="shelp" style="font-size:14px;margin-top:10px">${txt}</div>`)});
+$("toSettings").onclick=()=>document.querySelector('#tabs [data-tab="settings"]').click();
+
+// ---------- объяснение сигнала ----------
+let sigRows=[];
+const FACT={"модель":"Редкость модели","фон":"Редкость фона","символ":"Редкость символа","тираж":"Тираж коллекции","улучшено":"Сколько улучшено","возраст":"Возраст коллекции","стабильность":"Стабильность цены"};
+const pct=x=>x==null?"—":Math.round(x*100)+"%";
+function explain(r){
+  let d={};try{d=JSON.parse(r.details||"{}")}catch(e){}
+  const buy=r.decision==="buy", sig=r.decision==="signal";
+  let h=`<h2>${esc(r.title)}</h2><div class="sub">${MK[r.market]||r.market} · ${time(r.ts)} · лот ${n2(r.price)} TON (с комиссиями ${n2(r.buy_cost)})</div>`;
+  if(r.strategy!=="v2"){
+    h+=`<div class="sec"><h4>Оценка (старая логика v1)</h4>
+      <div class="kv"><span>Рыночная цена</span><b>${n2(r.market_price)} TON</b></div>
+      <div class="kv"><span>Ожидаемая прибыль</span><b class="${cls(r.profit_pct)}">${sign(r.profit_pct)}%</b></div>
+      <div class="kv"><span>Порог</span><b>${n2(r.required_pct)}%</b></div></div>`;
+  }else{
+    h+=`<div class="sec"><h4>💎 Справедливая цена</h4>
+      <div class="kv"><span>Fair (в ценах площадки)</span><b>${n2(r.fair)} TON</b></div>
+      <div class="kv"><span>Медиана продаж (на руки)</span><b>${n2(d.sales_median)} TON · вес ${pct(d.weight_sales)}</b></div>
+      <div class="kv"><span>Глубина стакана, 2–3-й лот (на руки)</span><b>${n2(d.floor_depth)} TON · вес ${pct(d.weight_sales==null?null:1-d.weight_sales)}</b></div>
+      ${Object.entries(d.discount_parts||{}).map(([k,v])=>`<div class="kv"><span>Дисконт: ${esc(k)}</span><b class="r">−${pct(v)}</b></div>`).join("")}
+      ${d.trend!=null?`<div class="kv"><span>Тренд цены (3д к 14д)</span><b class="${cls(d.trend)}">${(d.trend*100).toFixed(1)}%</b></div>`:""}</div>`;
+    if(d.sales_7d!=null)h+=`<div class="sec"><h4>💧 Ликвидность (все площадки)</h4>
+      <div class="kv"><span>Продаж за сутки / неделю</span><b>${d.sales_24h} / ${d.sales_7d}</b></div>
+      <div class="kv"><span>Оборот за неделю</span><b>${n2(d.volume_7d)} TON</b></div>
+      <div class="kv"><span>Лотов на продаже</span><b>${d.active_listings}</b></div>
+      <div class="kv"><span>Продастся примерно за</span><b>${d.days_to_sell==null?"не продаётся":d.days_to_sell.toFixed(1)+" дн."}</b></div>
+      <div class="kv"><span>Разрыв цены лотов и продаж</span><b>${pct(d.spread)}</b></div></div>`;
+    if(d.score!=null)h+=`<div class="sec"><h4>🏅 Оценка подарка: ${Math.round(d.score)}/100</h4>
+      ${Object.entries(d.score_parts||{}).map(([k,v])=>`<div class="factor"><span>${FACT[k]||k}</span><div class="bar" style="margin:0"><i style="width:${Math.round(v*100)}%"></i></div><b>${Math.round(v*100)}</b></div>`).join("")}</div>`;
+    if(d.ev_pct!=null)h+=`<div class="sec"><h4>📈 Ожидаемая прибыль</h4>
+      <div class="kv"><span>Выставить за</span><b>${n2(d.ask)} TON → на руки ${n2(d.net)}</b></div>
+      <div class="kv"><span>Вероятность продать</span><b>${pct(d.p_sale)}</b></div>
+      <div class="kv"><span>Риск колебаний цены</span><b>${n2(d.risk)} TON</b></div>
+      <div class="kv"><span>EV</span><b class="${cls(d.ev_pct)}">${sign(d.ev_pct)}% (${sign(d.ev)} TON)</b></div>
+      <div class="kv"><span>Порог${d.new_collection?" (новая коллекция)":""}</span><b>${n2(d.required_pct)}%</b></div>
+      ${d.size_limit!=null?`<div class="kv"><span>Допустимый размер сделки (Келли)</span><b>${n2(d.size_limit)} TON</b></div>`:""}</div>`;
+  }
+  const why=sig?`Арбитраж: выгоднее продать на ${MK[r.target_market]||r.target_market} (только сигнал)`:buy?"✅ Куплено: все проверки пройдены":"⛔ Пропуск: "+(r.reason||"").replace(/^limit:/,"лимит ");
+  h+=`<div class="verdict ${buy||sig?"ok":"no"}">${esc(why)}</div>`;
+  openSheet(h);
+}
+$("signalsTable").onclick=e=>{const tr=e.target.closest("tr[data-sig]");if(tr)explain(sigRows[+tr.dataset.sig])};
+
+// ---------- настройки ----------
+let editing=false;
+const settingsBusy=()=>editing||!!document.querySelector("#tab-settings input:focus");
+async function saveSetting(body,okText){
+  try{const r=await api("/api/settings",body);haptic("medium");toast("✅ "+(okText||r.message));renderSettings(r);refresh()}
+  catch(err){toast("⚠️ "+err.message);renderSettings(await api("/api/settings"))}
+}
+function renderSettings(data){
+  $("presets").innerHTML=data.presets.map(p=>`<button class="card preset ${data.active_preset===p.id?"on":""}" data-preset="${p.id}"><b>${esc(p.title)}</b><div class="sub">${esc(p.desc)}</div></button>`).join("");
+  $("settingsGroups").innerHTML=data.groups.map(g=>`<div class="card"><h3>${esc(g.title)}</h3><div class="sub" style="margin:-6px 0 4px">${esc(g.desc)}</div>
+    ${g.items.map(it=>{
+      const badge=it.changed?`<span class="changed">изменено</span>`:"";
+      const reset=it.changed&&it.default!=null?` <button class="reset" data-reset="${it.key}">↺ по умолчанию (${it.kind==="toggle"?(it.default?"вкл":"выкл"):it.default+" "+esc(it.unit)})</button>`:"";
+      const ctrl=it.kind==="toggle"
+        ?`<label class="switch"><input type="checkbox" data-key="${it.key}" data-danger="${it.danger}" ${it.value?"checked":""}><i></i></label>`
+        :`<div class="sval"><input type="number" data-key="${it.key}" value="${it.value}" min="${it.min}" max="${it.max}" step="${it.step}"><span class="unit">${esc(it.unit)}</span></div>`;
+      const slider=it.kind==="toggle"?"":`<input type="range" data-range="${it.key}" min="${it.min}" max="${it.max}" step="${it.step}" value="${it.value}">`;
+      return `<div class="setting"><div class="srow"><div class="stitle">${esc(it.title)}${badge}</div>${ctrl}</div>
+        <div class="shelp">${esc(it.help)}${reset}</div>${slider}</div>`}).join("")}</div>`).join("");
+}
+$("tab-settings").addEventListener("input",e=>{const k=e.target.dataset.range;if(!k)return;editing=true;
+  const num=document.querySelector(`input[type=number][data-key="${k}"]`);if(num)num.value=e.target.value});
+$("tab-settings").addEventListener("change",async e=>{const t=e.target;
+  if(t.dataset.range){editing=false;return saveSetting({key:t.dataset.range,value:t.value})}
+  if(t.type==="checkbox"){
+    if(t.checked&&t.dataset.danger==="true"&&!await ask("Включить новую математику для РЕАЛЬНЫХ сделок?\n\nДелайте это после проверки бэктестом.")){t.checked=false;return}
+    return saveSetting({key:t.dataset.key,value:t.checked,confirm:true})}
+  if(t.type==="number")return saveSetting({key:t.dataset.key,value:t.value});
+});
+$("tab-settings").addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.type==="number")e.target.blur()});
+$("tab-settings").addEventListener("click",async e=>{
+  const p=e.target.closest("[data-preset]");
+  if(p)return saveSetting({preset:p.dataset.preset});
+  const r=e.target.closest("[data-reset]");
+  if(r)return saveSetting({reset:r.dataset.reset});
+});
+$("resetAll").onclick=async()=>{if(await ask("Вернуть все настройки стратегии к значениям по умолчанию? Лимиты безопасности не изменятся."))saveSetting({reset:"all"},"Всё по умолчанию")};
 
 refresh(); liveStream();
 setInterval(refresh,30000);  // запасной вариант, если поток событий оборвётся

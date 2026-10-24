@@ -24,6 +24,7 @@ from gift_bot.models import parse_dt
 from gift_bot.panel.webapp_auth import verify_init_data
 from gift_bot.reports.weekly import week_stats
 from gift_bot.risk.limits import LIMIT_NAMES, LIVE, OBSERVE, RiskManager
+from gift_bot.settings_registry import BY_KEY, PRESETS, SettingsService
 from gift_bot.storage.db import Database
 
 log = logging.getLogger(__name__)
@@ -36,11 +37,13 @@ Notify = Callable[[str], Awaitable[None]]
 
 class Panel:
     def __init__(self, settings: Settings, db: Database, risk: RiskManager, notify: Notify,
-                 store: ManualAuthStore | None = None, markets: dict[str, MarketAdapter] | None = None):
+                 store: ManualAuthStore | None = None, markets: dict[str, MarketAdapter] | None = None,
+                 tuning: SettingsService | None = None):
         self.s = settings
         self.db = db
         self.risk = risk
         self.notify = notify
+        self.tuning = tuning or SettingsService(settings, db, risk)
         self.store = store or ManualAuthStore(db)
         self.markets = markets or {}
         self.app = web.Application(middlewares=[self._auth, self._csrf])
@@ -56,6 +59,8 @@ class Panel:
             web.post("/api/mode", self.mode),
             web.post("/api/limits", self.limits),
             web.post("/api/auth", self.auth),
+            web.get("/api/settings", self.get_settings),
+            web.post("/api/settings", self.post_settings),
         ])
         self._runner: web.AppRunner | None = None
         self._bal: dict[str, float | None] = {}
@@ -225,6 +230,33 @@ class Panel:
             else:
                 await self.notify("🧪 Режим наблюдения включён из админ-панели.")
         return web.json_response({"ok": True})
+
+    async def get_settings(self, _: web.Request) -> web.Response:
+        return web.json_response(self.tuning.snapshot())
+
+    async def post_settings(self, request: web.Request) -> web.Response:
+        """{key, value} — изменить; {reset: key|"all"} — вернуть по умолчанию; {preset: name} — профиль."""
+        body = await request.json()
+        try:
+            if "preset" in body:
+                if body["preset"] not in PRESETS:
+                    raise ValueError("неизвестный профиль")
+                title = await self.tuning.apply_preset(body["preset"])
+                msg = f"Профиль «{title}»"
+            elif "reset" in body:
+                key = None if body["reset"] == "all" else body["reset"]
+                await self.tuning.reset(key)
+                msg = "Сброшено к значениям по умолчанию" if key is None else \
+                    f"{BY_KEY[key].title}: по умолчанию"
+            else:
+                if BY_KEY.get(body.get("key")) and BY_KEY[body["key"]].danger and body.get("value") \
+                        and body.get("confirm") is not True:
+                    raise ValueError("нужно подтверждение")
+                msg = await self.tuning.set(body.get("key"), body.get("value"))
+        except (ValueError, KeyError) as e:
+            return web.json_response({"error": str(e).strip("'")}, status=400)
+        await self.notify(f"⚙️ Настройки из панели: {msg}")
+        return web.json_response({"ok": True, "message": msg, **self.tuning.snapshot()})
 
     async def _balances(self) -> dict[str, float | None]:
         """Балансы площадок (кэш 60 с — панель обновляется каждые 10 с)."""
