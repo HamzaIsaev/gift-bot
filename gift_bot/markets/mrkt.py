@@ -7,13 +7,13 @@ from __future__ import annotations
 
 import logging
 
-from amrkt.models import Balance, FeedResponse, Gift, GiftList, PurchaseResult, SearchParams
+from amrkt.models import Balance, FeedResponse, Gift, GiftCollection, GiftList, PurchaseResult, SearchParams
 from curl_cffi.requests import AsyncSession
 
 from gift_bot.markets.base import MarketAdapter, MarketError
 from datetime import timezone
 
-from gift_bot.models import Listing, Sale, utcnow
+from gift_bot.models import CollectionInfo, Listing, Sale, parse_dt, per_mille_to_pct, utcnow
 
 log = logging.getLogger(__name__)
 
@@ -39,6 +39,11 @@ def _listing(g: Gift) -> Listing | None:
         number=g.number,
         price=g.sale_price / NANO,
         raw_seller_net=(g.sale_price_without_fee / NANO) if g.sale_price_without_fee else None,
+        model_rarity=per_mille_to_pct(g.model_rarity_per_mille),
+        backdrop_rarity=per_mille_to_pct(g.backdrop_rarity_per_mille),
+        symbol_rarity=per_mille_to_pct(g.symbol_rarity_per_mille),
+        coll_supply=g.max_upgraded_count or None,
+        coll_upgraded=g.total_upgraded_count or None,
     )
 
 
@@ -104,6 +109,22 @@ class MrktMarket(MarketAdapter):
     async def lowest_listings(self, collection: str, model: str, limit: int = 3) -> list[Listing]:
         return await self._search(collection_names=[collection], model_names=[model],
                                   ordering="Price", low_to_high=True, count=limit)
+
+    async def collections_info(self) -> list[CollectionInfo]:
+        """Дата создания коллекции; тираж и число улучшенных — из лотов этой коллекции."""
+        token = await self._login(force=False)
+        async with AsyncSession(impersonate="chrome124", proxy=self._proxy, timeout=15) as s:
+            r = await s.get(f"{API_URL}/gifts/collections", headers={**HEADERS, "Authorization": token})
+        if r.status_code != 200:
+            raise MarketError(f"mrkt collections: {r.status_code}")
+        out = []
+        for raw in r.json() or []:
+            try:
+                c = GiftCollection.model_validate(raw)
+            except Exception:
+                continue
+            out.append(CollectionInfo(name=c.title or c.name, created_at=parse_dt(c.created_at)))
+        return out
 
     # --- торговля ---
     async def _get(self, path: str) -> dict:

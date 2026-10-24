@@ -38,10 +38,21 @@ class Listing:
     price: float             # цена на витрине, TON
     seen_at: datetime = field(default_factory=utcnow)
     raw_seller_net: float | None = None  # если площадка сама отдаёт «цену без комиссии»
+    # Редкость признаков, % владельцев (меньше — реже); None — площадка не отдала
+    model_rarity: float | None = None
+    backdrop_rarity: float | None = None
+    symbol_rarity: float | None = None
+    # Сведения о коллекции, если площадка отдаёт их прямо в лоте (MRKT)
+    coll_supply: int | None = None
+    coll_upgraded: int | None = None
 
     @property
     def key(self) -> str:
         return model_key(self.collection, self.model)
+
+    @property
+    def collection_key(self) -> str:
+        return clean_attr(self.collection).lower()
 
     @property
     def title(self) -> str:
@@ -75,3 +86,34 @@ def parse_dt(value: str | int | float | None) -> datetime:
         return datetime.fromtimestamp(ts, tz=timezone.utc)
     dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+_PCT_RE = re.compile(r"\(([\d.,]+)%\)")
+
+
+def rarity_pct(value: str | None) -> float | None:
+    """'Zebra (1.5%)' -> 1.5."""
+    m = _PCT_RE.search(value or "")
+    return float(m.group(1).replace(",", ".")) if m else None
+
+
+def per_mille_to_pct(value) -> float | None:
+    """Редкость в промилле (15 = 1.5%) -> проценты."""
+    try:
+        return float(value) / 10 if value not in (None, "", 0) else None
+    except (TypeError, ValueError):
+        return None
+
+
+@dataclass
+class CollectionInfo:
+    """Сведения о коллекции для фундаментальной оценки."""
+
+    name: str
+    supply: int | None = None        # тираж
+    upgraded: int | None = None      # сколько улучшено до NFT
+    created_at: datetime | None = None
+
+    @property
+    def key(self) -> str:
+        return clean_attr(self.name).lower()

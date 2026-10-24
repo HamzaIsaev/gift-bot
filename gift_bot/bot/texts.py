@@ -71,3 +71,13 @@ def daily_loss_hit(pnl: float, limit: float) -> str:
         f"🛑 <b>Дневной лимит убытка достигнут</b>: {pnl:+.2f} TON (лимит {limit} TON).\n"
         f"Новые покупки остановлены до завтра. Открытые позиции продолжают продаваться."
     )
+
+
+def exit_signal(pos, fair: float, drop_pct: float, trend: float, virtual: bool) -> str:
+    return (
+        f"{tag(virtual)}🚪 <b>Сигнал на выход #{pos['id']}</b> · {mk(pos['market'])}\n"
+        f"{escape(pos['title'])}\n"
+        f"Справедливая цена упала до {ton(fair)}: на {drop_pct:.0f}% ниже покупки ({ton(pos['buy_cost'])}), "
+        f"тренд {trend:+.0%}.\n"
+        f"Сейчас выставлено за {ton(pos['ask_price'])}. Решите: держать или продать дешевле."
+    )

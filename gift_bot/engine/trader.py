@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections import deque
 from datetime import timedelta
@@ -9,6 +10,7 @@ from typing import Awaitable, Callable
 
 from gift_bot.bot import texts
 from gift_bot.config import Settings
+from gift_bot.engine.decision_v2 import MarketState, assess, reprice_step_mult
 from gift_bot.engine.strategy import Evaluation, Plan, Strategy
 from gift_bot.execution.base import Executor
 from gift_bot.markets.base import MarketAdapter
@@ -24,6 +26,7 @@ Notify = Callable[[str], Awaitable[None]]
 SEEN_MAX = 5000
 PRE_FILTER_RATIO = 0.95      # лот дороже 95% известной цены — даже не считаем
 POSITIONS_EVERY_SEC = 60
+COLLECTIONS_EVERY_SEC = 6 * 3600
 FOLLOW_FLOOR_AFTER = timedelta(minutes=30)
 
 
@@ -48,6 +51,7 @@ class Trader:
         self._warmed: set[str] = set()
         self._errors: dict[str, int] = {m: 0 for m in markets}
         self._auth_warned: set[str] = set()
+        self._exit_warned: set[int] = set()   # по каким позициям уже прислали сигнал на выход
 
     @property
     def executor(self) -> Executor | None:
@@ -61,6 +65,7 @@ class Trader:
     async def run(self) -> None:
         tasks = [asyncio.create_task(self._market_loop(m), name=f"market:{m}") for m in self.markets]
         tasks.append(asyncio.create_task(self._positions_loop(), name="positions"))
+        tasks.append(asyncio.create_task(self._collections_loop(), name="collections"))
         await asyncio.gather(*tasks)
 
     def _remember(self, market: str, listing_id: str) -> bool:
@@ -114,7 +119,29 @@ class Trader:
             log.info("%s: стартовая витрина %d лотов", market, len(listings))
             return
         for lst in fresh:
+            await self._remember_market_data(lst)
             await self.process_listing(lst)
+
+    async def _remember_market_data(self, lst: Listing) -> None:
+        """История для анализа/бэктеста и учёт коллекций (тираж, когда впервые увидели)."""
+        try:
+            await self.db.record_listing(lst)
+            await self.db.upsert_collection(lst.collection_key, lst.collection,
+                                            supply=lst.coll_supply, upgraded=lst.coll_upgraded)
+        except Exception as e:
+            log.debug("market data: %s", e)
+
+    async def _collections_loop(self) -> None:
+        """Раз в 6 часов: тираж и дата выхода коллекций с площадок, которые это отдают."""
+        while True:
+            for name, market in self.markets.items():
+                try:
+                    for c in await market.collections_info():
+                        await self.db.upsert_collection(c.key, c.name, supply=c.supply,
+                                                        upgraded=c.upgraded, created_at=c.created_at)
+                except Exception as e:
+                    log.debug("collections %s: %s", name, e)
+            await asyncio.sleep(COLLECTIONS_EVERY_SEC)
 
     # --- обработка лота ---
     async def process_listing(self, lst: Listing) -> None:
@@ -168,6 +195,14 @@ class Trader:
                 and not (reason or "").startswith("limit:"):
             return None
         lst = plan.listing
+        extra: dict = {"strategy": "v1"}
+        if ev.v2 is not None:  # v2: всё, на чём основано решение — для панели и анализа
+            d = ev.v2
+            extra = {"strategy": "v2", "fair": d.fair_gross, "score": d.score,
+                     "sales_7d": d.liq.sales_7d if d.liq else None,
+                     "days_to_sell": d.liq.days_to_sell if d.liq and d.liq.days_to_sell != float("inf") else None,
+                     "ev_pct": d.ev.ev_pct if d.ev else None,
+                     "details": json.dumps(d.details(), ensure_ascii=False, default=str)}
         return await self.db.add_signal(
             mode=self.risk.mode_db, kind=plan.kind, market=lst.market,
             target_market=plan.target_market, listing_id=lst.listing_id, model_key=lst.key,
@@ -175,6 +210,7 @@ class Trader:
             floor_price=plan.view.floor, sales_median=plan.view.sales_median,
             sales_count=plan.view.sales_count, expected_net=plan.expected_net,
             profit_pct=plan.profit_pct, required_pct=ev.required_pct, decision=decision, reason=reason,
+            **extra,
         )
 
     # --- позиции ---
@@ -218,13 +254,18 @@ class Trader:
             return None
         now = utcnow()
         since_reprice = now - parse_dt(pos["last_reprice_at"])
+        pos_listing = Listing(market=pos["market"], listing_id=pos["listing_id"], collection=pos["collection"],
+                              model=pos["model"], backdrop="", symbol="", number=None, price=ask)
+        step = self.s.reprice_step_pct
+        if self.strategy.use_v2() and since_reprice >= FOLLOW_FLOOR_AFTER:
+            state = await self._market_state(pos, pos_listing)
+            if state is not None:
+                step *= reprice_step_mult(state.liq.days_to_sell)  # ликвид — медленнее, неликвид — быстрее
         candidate = None
         if since_reprice >= timedelta(hours=self.s.reprice_after_hours):
-            candidate = ask * (1 - self.s.reprice_step_pct / 100)
+            candidate = ask * (1 - step / 100)
         if self.s.adaptive and since_reprice >= FOLLOW_FLOOR_AFTER:
-            lows = await self.pricer.lowest(pos["market"], Listing(
-                market=pos["market"], listing_id=pos["listing_id"], collection=pos["collection"],
-                model=pos["model"], backdrop="", symbol="", number=None, price=ask))
+            lows = await self.pricer.lowest(pos["market"], pos_listing)
             ours = {pos["listing_id"], pos["item_id"]}
             others = [x.price for x in lows if x.listing_id not in ours]
             if others:
@@ -235,6 +276,24 @@ class Trader:
         if candidate is None:
             return None
         return round(max(candidate, min_price), 2)
+
+    async def _market_state(self, pos: sqlite_row, pos_listing: Listing) -> MarketState | None:
+        """Fair и ликвидность модели позиции; заодно сигнал на выход, если fair упал и тренд вниз."""
+        try:
+            snap = await self.strategy.snapshot(pos_listing)
+            snap.floors = {m: [p for p in ps if p != pos["ask_price"]] for m, ps in snap.floors.items()}
+            state = assess(snap, self.s)
+        except Exception as e:
+            log.debug("market state #%s: %s", pos["id"], e)
+            return None
+        if state.fair_net is not None and pos["id"] not in self._exit_warned:
+            fair_gross = state.fair_net / (1 - self.s.fees(pos["market"]).sell)
+            drop = (1 - fair_gross / pos["buy_cost"]) * 100
+            if drop >= self.s.exit_drop_pct and state.fv.trend < 0:
+                self._exit_warned.add(pos["id"])
+                await self.notify(texts.exit_signal(pos, fair_gross, drop, state.fv.trend,
+                                                    virtual=pos["mode"] == "virtual"))
+        return state
 
     async def _close(self, pos: sqlite_row, sold: float) -> None:
         net = self.pricer.sell_net(pos["market"], sold)

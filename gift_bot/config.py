@@ -77,6 +77,38 @@ class Settings(BaseSettings):
     # Сигналы со скидкой меньше этого не пишутся в БД (чтобы не раздувать её)
     log_signal_min_discount_pct: float = Field(5.0, alias="LOG_SIGNAL_MIN_DISCOUNT_PCT")
 
+    # --- Торговая математика v2 (fair value, ликвидность, EV) ---
+    strategy_v2: bool = Field(True, alias="STRATEGY_V2")                # v2 в режиме наблюдения
+    strategy_v2_live: bool = Field(False, alias="STRATEGY_V2_LIVE")     # v2 и в боевом (после проверки)
+    sales_half_life_days: float = Field(3.0, alias="SALES_HALF_LIFE_DAYS")  # вес продажи вдвое меньше через N дней
+    mad_k: float = Field(3.0, alias="MAD_K")                             # выброс — дальше 3·MAD от медианы
+    fair_sales_k: float = Field(5.0, alias="FAIR_SALES_K")               # вес продаж = n/(n+K)
+    fair_max_sales_weight: float = Field(0.8, alias="FAIR_MAX_SALES_WEIGHT")
+    fair_thin_discount: float = Field(0.05, alias="FAIR_THIN_DISCOUNT")  # дисконт, если продаж мало
+    fair_trend_k: float = Field(1.0, alias="FAIR_TREND_K")               # дисконт = падение тренда × K
+    fair_trend_max_discount: float = Field(0.10, alias="FAIR_TREND_MAX_DISCOUNT")
+    floor_depth_limit: int = Field(10, alias="FLOOR_DEPTH_LIMIT")        # сколько лотов смотреть в стакане
+    # Ликвидность (по всем площадкам вместе)
+    min_sales_7d: int = Field(5, alias="MIN_SALES_7D")
+    min_volume_ton: float = Field(50.0, alias="MIN_VOLUME_TON")          # оборот за 7 дней
+    max_days_to_sell: float = Field(7.0, alias="MAX_DAYS_TO_SELL")       # активные лоты / продаж в день
+    max_spread: float = Field(0.40, alias="MAX_SPREAD")                  # |медиана − floor| / медиана
+    # Фундаментальность
+    min_score: float = Field(45.0, alias="MIN_SCORE")                    # 0–100
+    # Новые коллекции (появились, когда бот уже работал)
+    new_collection_days: float = Field(14, alias="NEW_COLLECTION_DAYS")
+    new_collection_block_days: float = Field(3, alias="NEW_COLLECTION_BLOCK_DAYS")  # первые дни не покупать
+    new_profit_mult: float = Field(1.5, alias="NEW_PROFIT_MULT")         # порог прибыли ×1.5
+    new_size_mult: float = Field(0.5, alias="NEW_SIZE_MULT")             # размер позиции ×0.5
+    new_min_sales: int = Field(10, alias="NEW_MIN_SALES")
+    new_window_days: float = Field(3, alias="NEW_WINDOW_DAYS")           # окно цены короче
+    new_vol_discount_k: float = Field(1.0, alias="NEW_VOL_DISCOUNT_K")   # доп. дисконт = σ·K
+    # Размер позиции
+    kelly_fraction: float = Field(0.25, alias="KELLY_FRACTION")
+    max_collection_share: float = Field(0.30, alias="MAX_COLLECTION_SHARE")  # доля капитала в одной коллекции
+    # Продажа
+    exit_drop_pct: float = Field(10.0, alias="EXIT_DROP_PCT")            # fair ниже покупки на N% + тренд вниз → выход
+
     # --- Лимиты по умолчанию ---
     max_trade_ton: float = Field(20.0, alias="MAX_TRADE_TON")
     max_daily_loss_ton: float = Field(30.0, alias="MAX_DAILY_LOSS_TON")

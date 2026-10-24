@@ -75,11 +75,16 @@ class Pricer:
             return cached
         async with self._sem:
             try:
-                res = await self.markets[market].lowest_listings(listing.collection, listing.model, limit=3)
+                res = await self.markets[market].lowest_listings(
+                    listing.collection, listing.model, limit=self.s.floor_depth_limit)
             except Exception as e:
                 log.warning("floor %s %s: %s", market, listing.key, e)
                 return []
         self._floor_cache[(market, listing.key)] = (time.monotonic(), res)
+        try:  # снимок стакана — для анализа и бэктеста
+            await self.db.add_floor_snapshot(market, listing.key, [x.price for x in res])
+        except Exception as e:
+            log.debug("floor snapshot: %s", e)
         return res
 
     async def _sales_stats(self, key: str, market: str) -> tuple[float | None, int, float]:

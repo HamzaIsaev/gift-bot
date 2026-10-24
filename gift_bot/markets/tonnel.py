@@ -10,7 +10,7 @@ import logging
 import tonnelmp
 
 from gift_bot.markets.base import MarketAdapter, MarketError
-from gift_bot.models import Listing, Sale, clean_attr, parse_dt
+from gift_bot.models import Listing, Sale, clean_attr, parse_dt, rarity_pct
 
 log = logging.getLogger(__name__)
 
@@ -34,6 +34,9 @@ def _listing(d: dict) -> Listing | None:
         symbol=clean_attr(d.get("symbol")),
         number=d.get("gift_num"),
         price=price,
+        model_rarity=rarity_pct(d.get("model")),
+        backdrop_rarity=rarity_pct(d.get("backdrop")),
+        symbol_rarity=rarity_pct(d.get("symbol")),
     )
 
 

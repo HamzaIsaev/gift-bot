@@ -141,7 +141,7 @@ code{background:#1a2333;padding:1px 6px;border-radius:6px;color:#9fd8ff}
   </section>
 
   <section id="tab-signals" class="hidden">
-    <div class="card"><h3>Сигналы</h3><div class="scroll"><table><thead><tr><th>Время</th><th>Подарок</th><th>Площадка</th><th>Цена</th><th>Рынок</th><th>Прибыль</th><th>Порог</th><th>Решение</th></tr></thead><tbody id="signalsTable"></tbody></table></div></div>
+    <div class="card"><h3>Сигналы</h3><div class="scroll"><table><thead><tr><th>Время</th><th>Подарок</th><th>Площадка</th><th>Цена</th><th>Fair</th><th>Score</th><th>Продаж/7д</th><th>EV</th><th>Порог</th><th>Решение / причина</th></tr></thead><tbody id="signalsTable"></tbody></table></div></div>
   </section>
 </div>
 <div class="toast" id="toast"></div>
@@ -238,8 +238,9 @@ async function loadTab(){
     $("tradesTable").innerHTML=rows.length?rows.map(r=>`<tr><td>${time(r.closed_at)}</td><td>${esc(r.title)}</td><td>${MK[r.market]||esc(r.market)}</td><td>${n2(r.buy_cost)}</td><td>${n2(r.sold_price)}</td><td>${n2(r.net_proceeds)}</td><td class="${cls(r.pnl)}"><b>${sign(r.pnl)}</b></td><td>${hours(r.opened_at,r.closed_at)}</td></tr>`).join(""):`<tr><td colspan="8" class="empty">Сделок пока нет</td></tr>`;
   }else if(tab==="signals"){
     const rows=await api("/api/signals");
-    const dec=r=>r.decision==="buy"?'<span class="tag buy">покупка</span>':r.decision==="signal"?'<span class="tag arb">арбитраж → '+(MK[r.target_market]||"")+'</span>':`<span class="tag" title="${esc(r.reason)}">пропуск: ${esc((r.reason||"").replace(/^limit:/,"лимит ").split(" — ")[0].slice(0,28))}</span>`;
-    $("signalsTable").innerHTML=rows.length?rows.map(r=>`<tr><td>${time(r.ts)}</td><td>${esc(r.title)}</td><td>${MK[r.market]||esc(r.market)}</td><td>${n2(r.price)}</td><td>${n2(r.market_price)}</td><td class="${cls(r.profit_pct)}">${sign(r.profit_pct)}%</td><td>${n2(r.required_pct)}%</td><td>${dec(r)}</td></tr>`).join(""):`<tr><td colspan="8" class="empty">Сигналов пока нет</td></tr>`;
+    const dec=r=>r.decision==="buy"?'<span class="tag buy">покупка</span>':r.decision==="signal"?'<span class="tag arb">арбитраж → '+(MK[r.target_market]||"")+'</span>':`<span class="tag" title="${esc(r.reason)}">пропуск</span> <span class="sub">${esc((r.reason||"").replace(/^limit:/,"лимит "))}</span>`;
+    const ev=r=>r.ev_pct!=null?r.ev_pct:r.profit_pct;
+    $("signalsTable").innerHTML=rows.length?rows.map(r=>`<tr><td>${time(r.ts)}</td><td>${esc(r.title)}</td><td>${MK[r.market]||esc(r.market)}</td><td>${n2(r.price)}</td><td>${n2(r.fair??r.market_price)}</td><td>${r.score!=null?Math.round(r.score):"—"}</td><td>${r.sales_7d??"—"}</td><td class="${cls(ev(r))}">${sign(ev(r))}%</td><td>${n2(r.required_pct)}%</td><td>${dec(r)}</td></tr>`).join(""):`<tr><td colspan="10" class="empty">Сигналов пока нет</td></tr>`;
   }
 }
 

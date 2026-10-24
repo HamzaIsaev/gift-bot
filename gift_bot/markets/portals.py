@@ -6,7 +6,7 @@ import logging
 from aportalsmp import gifts as pm
 
 from gift_bot.markets.base import MarketAdapter
-from gift_bot.models import Listing, Sale, parse_dt
+from gift_bot.models import CollectionInfo, Listing, Sale, parse_dt, per_mille_to_pct
 
 log = logging.getLogger(__name__)
 
@@ -21,6 +21,9 @@ def _listing(g) -> Listing:
         symbol=g.symbol or "",
         number=int(g.tg_id) if g.tg_id else None,
         price=g.price,
+        model_rarity=per_mille_to_pct(g.model_rarity),
+        backdrop_rarity=per_mille_to_pct(g.backdrop_rarity),
+        symbol_rarity=per_mille_to_pct(g.symbol_rarity),
     )
 
 
@@ -56,6 +59,11 @@ class PortalsMarket(MarketAdapter):
             log.debug("portals floor %s/%s: %s", collection, model, e)
             return []
         return [_listing(g) for g in res if g.price > 0]
+
+    async def collections_info(self) -> list[CollectionInfo]:
+        res = await self.with_auth(lambda a: pm.collections(limit=500, authData=a))
+        return [CollectionInfo(name=c.get("name", ""), supply=int(c.get("supply") or 0) or None)
+                for c in getattr(res, "_collections", []) if c.get("name")]
 
     # --- торговля ---
     async def balance(self) -> float:

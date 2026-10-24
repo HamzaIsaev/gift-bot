@@ -9,7 +9,7 @@ import time
 from abc import ABC, abstractmethod
 from typing import Awaitable, Callable
 
-from gift_bot.models import Listing, Sale
+from gift_bot.models import CollectionInfo, Listing, Sale
 
 AUTH_TTL_SEC = 30 * 60
 FORCED_REFRESH_MIN_SEC = 60  # не дёргать Telegram чаще раза в минуту при сетевых сбоях
@@ -64,6 +64,10 @@ class MarketAdapter(ABC):
     @abstractmethod
     async def lowest_listings(self, collection: str, model: str, limit: int = 3) -> list[Listing]:
         """Самые дешёвые лоты конкретной модели (для расчёта floor)."""
+
+    async def collections_info(self) -> list[CollectionInfo]:
+        """Тираж/дата создания коллекций, если площадка их отдаёт."""
+        return []
 
     # --- торговля (боевой режим) ---
     async def balance(self) -> float:

@@ -86,7 +86,53 @@ CREATE TABLE IF NOT EXISTS events (
     level TEXT NOT NULL,
     text  TEXT NOT NULL
 );
+
+-- История для анализа и бэктеста
+CREATE TABLE IF NOT EXISTS floor_snapshots (
+    ts         TEXT NOT NULL,
+    market     TEXT NOT NULL,
+    model_key  TEXT NOT NULL,
+    f1         REAL,
+    f2         REAL,
+    f3         REAL,
+    n_listings INTEGER NOT NULL           -- сколько лотов видно в стакане (до FLOOR_DEPTH_LIMIT)
+);
+CREATE INDEX IF NOT EXISTS ix_floor_key_time ON floor_snapshots (model_key, ts);
+
+CREATE TABLE IF NOT EXISTS listing_events (
+    market          TEXT NOT NULL,
+    listing_id      TEXT NOT NULL,
+    seen_at         TEXT NOT NULL,
+    model_key       TEXT NOT NULL,
+    collection      TEXT NOT NULL,
+    model           TEXT NOT NULL,
+    backdrop        TEXT,
+    symbol          TEXT,
+    number          INTEGER,
+    price           REAL NOT NULL,
+    model_rarity    REAL,
+    backdrop_rarity REAL,
+    symbol_rarity   REAL,
+    PRIMARY KEY (market, listing_id)
+);
+CREATE INDEX IF NOT EXISTS ix_listing_events_time ON listing_events (seen_at);
+
+CREATE TABLE IF NOT EXISTS collections (
+    coll_key   TEXT PRIMARY KEY,
+    name       TEXT NOT NULL,
+    first_seen TEXT NOT NULL,             -- когда бот впервые увидел коллекцию
+    created_at TEXT,                      -- дата выхода (если площадка отдаёт)
+    supply     INTEGER,
+    upgraded   INTEGER,
+    updated_at TEXT NOT NULL
+);
 """
+
+# Колонки сигналов v2: справедливая цена, фундаментальность, ликвидность, EV
+SIGNAL_V2_COLUMNS = {
+    "strategy": "TEXT", "fair": "REAL", "score": "REAL", "sales_7d": "INTEGER",
+    "days_to_sell": "REAL", "ev_pct": "REAL", "details": "TEXT",
+}
 
 
 def iso(dt: datetime) -> str:
@@ -119,6 +165,14 @@ class Database:
             await self.conn.execute("ALTER TABLE positions ADD COLUMN item_id TEXT")
         if "listed" not in cols:
             await self.conn.execute("ALTER TABLE positions ADD COLUMN listed INTEGER NOT NULL DEFAULT 1")
+        cur = await self.conn.execute("PRAGMA table_info(signals)")
+        sig_cols = {r["name"] for r in await cur.fetchall()}
+        for name, kind in SIGNAL_V2_COLUMNS.items():
+            if name not in sig_cols:
+                await self.conn.execute(f"ALTER TABLE signals ADD COLUMN {name} {kind}")
+        # Момент, когда бот начал наблюдать рынок: коллекции, известные с этого момента, — не «новые»
+        await self.conn.execute(
+            "INSERT OR IGNORE INTO settings(key, value) VALUES('db_created_at', ?)", (json.dumps(iso(utcnow())),))
         await self.conn.commit()
 
     async def close(self) -> None:
@@ -153,6 +207,46 @@ class Database:
                 new.append(s)
         await self.conn.commit()
         return new
+
+    async def sales_rows(self, key: str, days: float, until: datetime | None = None) -> list[sqlite_row]:
+        """Продажи модели на всех площадках за последние N дней (для fair value и ликвидности)."""
+        until = until or utcnow()
+        cur = await self.conn.execute(
+            "SELECT market, price, sold_at, backdrop FROM sales "
+            "WHERE model_key=? AND sold_at>=? AND sold_at<=? ORDER BY sold_at",
+            (key, iso(until - timedelta(days=days)), iso(until)))
+        return await cur.fetchall()
+
+    # --- история рынка ---
+    async def add_floor_snapshot(self, market: str, key: str, prices: list[float]) -> None:
+        p = sorted(prices)[:3] + [None] * 3
+        await self.conn.execute(
+            "INSERT INTO floor_snapshots VALUES (?,?,?,?,?,?,?)",
+            (iso(utcnow()), market, key, p[0], p[1], p[2], len(prices)))
+        await self.conn.commit()
+
+    async def record_listing(self, lst) -> None:
+        await self.conn.execute(
+            "INSERT OR IGNORE INTO listing_events VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (lst.market, lst.listing_id, iso(lst.seen_at), lst.key, lst.collection, lst.model,
+             lst.backdrop, lst.symbol, lst.number, lst.price,
+             lst.model_rarity, lst.backdrop_rarity, lst.symbol_rarity))
+        await self.conn.commit()
+
+    async def upsert_collection(self, coll_key: str, name: str, *, supply: int | None = None,
+                                upgraded: int | None = None, created_at: datetime | None = None) -> None:
+        now = iso(utcnow())
+        await self.conn.execute(
+            "INSERT INTO collections(coll_key, name, first_seen, created_at, supply, upgraded, updated_at) "
+            "VALUES (?,?,?,?,?,?,?) ON CONFLICT(coll_key) DO UPDATE SET "
+            "created_at=COALESCE(excluded.created_at, created_at), supply=COALESCE(excluded.supply, supply), "
+            "upgraded=COALESCE(excluded.upgraded, upgraded), updated_at=excluded.updated_at",
+            (coll_key, name, now, iso(created_at) if created_at else None, supply, upgraded, now))
+        await self.conn.commit()
+
+    async def get_collection(self, coll_key: str) -> sqlite_row | None:
+        cur = await self.conn.execute("SELECT * FROM collections WHERE coll_key=?", (coll_key,))
+        return await cur.fetchone()
 
     async def recent_sale_prices(self, key: str, days: int, market: str | None = None) -> list[float]:
         since = iso(utcnow() - timedelta(days=days))
@@ -275,6 +369,11 @@ class Database:
         )
         row = await cur.fetchone()
         return row["n"], row["s"]
+
+    async def skip_reasons(self, since: datetime, until: datetime) -> list[str]:
+        cur = await self.conn.execute(
+            "SELECT reason FROM signals WHERE decision='skip' AND ts>=? AND ts<?", (iso(since), iso(until)))
+        return [r["reason"] or "" for r in await cur.fetchall()]
 
     async def count_skipped(self, since: datetime, until: datetime, reason_prefix: str = "limit:") -> int:
         cur = await self.conn.execute(

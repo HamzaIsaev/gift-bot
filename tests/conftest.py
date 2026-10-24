@@ -19,6 +19,7 @@ def make_settings(**over) -> Settings:
         TG_API_HASH="hash-secret-value", TG_SESSION_STRING="session-secret-value",
         ENABLED_MARKETS=["portals", "tonnel"], FEES_PORTALS={"buy": 0.0, "sell": 0.05},
         FEES_TONNEL={"buy": 0.10, "sell": 0.0}, NETWORK_FEE_TON=0.0, TRANSFER_COST_TON=0.5,
+        STRATEGY_V2=False,  # старые тесты проверяют логику v1; v2 — в test_decision_v2.py
     )
     base.update(over)
     return Settings(_env_file=None, **base)
